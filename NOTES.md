@@ -502,10 +502,10 @@ public/
 Session 1 is DONE (TuningPanel exists). Continue from session 2.
 
 1. ~~`edoUtils.js` + `<TuningPanel>`~~ DONE
-2. `primeUtils.js` — isPrime, nextPrime; update PrimeSelector to support
-   custom prime input and validate entries
-3. `commaUtils.js` — parse commas_best.txt, monzoToCents, monzoToRatio
-   (BigInt), filterCommas by primes and edo
+2. ~~`primeUtils.js` — isPrime, nextPrime; update PrimeSelector to support
+   custom prime input and validate entries~~ DONE
+3. ~~`commaUtils.js` — parse commas_best.txt, monzoToCents, monzoToRatio
+   (BigInt), filterCommas by primes and edo~~ DONE
 4. `<TonnetzGrid>` — SVG grid with configurable axes and colored arrows
 5. `<CommaList>` + `<CommaDetail>` — filterable comma selector wired to
    commaUtils; show path on Tonnetz

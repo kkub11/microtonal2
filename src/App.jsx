@@ -3,6 +3,7 @@ import { computeTuningError } from './utils/edoUtils'
 import Header from './components/Header'
 import WorkflowStepper from './components/WorkflowStepper'
 import TuningPanel from './components/TuningPanel'
+import TonnetzPanel from './components/TonnetzPanel'
 
 const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
@@ -11,15 +12,20 @@ const initialState = {
   // Step 1
   edo: 53,
   primes: [2, 3, 5],
-  // Steps 2–6 populated as we build them
+  // Step 2
+  xInterval: { ratio: [3, 2] },
+  yInterval: { ratio: [5, 4] },
+  // Steps 3–6 populated as we build them
 }
 
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_STEP':   return { ...state, currentStep: action.payload }
     case 'SET_EDO':    return { ...state, edo: action.payload }
-    case 'SET_PRIMES': return { ...state, primes: action.payload }
-    default:           return state
+    case 'SET_PRIMES':     return { ...state, primes: action.payload }
+    case 'SET_X_INTERVAL': return { ...state, xInterval: action.payload }
+    case 'SET_Y_INTERVAL': return { ...state, yInterval: action.payload }
+    default:               return state
   }
 }
 
@@ -48,6 +54,16 @@ export default function App() {
               tuningErrors={tuningErrors}
               onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
               onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
+            />
+          )}
+          {state.currentStep === 2 && (
+            <TonnetzPanel
+              edo={state.edo}
+              primes={state.primes}
+              xInterval={state.xInterval}
+              yInterval={state.yInterval}
+              onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
+              onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
             />
           )}
         </main>

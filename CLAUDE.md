@@ -27,17 +27,19 @@ Global app state lives in `App.jsx` via `useReducer`. Each workflow step receive
 ```
 src/
   utils/
-    edoUtils.js       — getStepFreq, getBestApprox, computeTuningError
-    commaUtils.js     — parseCommasText, loadCommas, monzoToRatio,
-                        monzoToCents, filterCommas, commaToTonnetzPath
+    edoUtils.js         — getStepFreq, getBestApprox, computeTuningError
+    primeUtils.js       — isPrime(n), nextPrime(n)
+    primeUtils.test.js
+    commaUtils.js       — parseCommasText, loadCommas, monzoToRatio,
+                          monzoToCents, filterCommas, commaToTonnetzPath
     commaUtils.test.js
   components/
     Header.jsx
     WorkflowStepper.jsx
     TuningPanel/
       index.jsx         — step 1 container
-      EdoSelector.jsx   — number input + common-EDO quick-picks
-      PrimeSelector.jsx — toggle buttons for primes 3/5/7/11/13 (2 locked)
+      EdoSelector.jsx   — preset dropdown (Jim's EDOs) + custom number input
+      PrimeSelector.jsx — toggles for 3/5/7/11/13 + custom prime input w/ isPrime validation; warns if any prime > 13 (comma file only covers 2–13)
       TuningErrorTable.jsx — color-coded grid of per-interval tuning errors
 ```
 
