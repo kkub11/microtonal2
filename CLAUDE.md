@@ -34,15 +34,16 @@ src/
   components/
     Header.jsx
     WorkflowStepper.jsx
-    EdoSelector.jsx   — number input + common-EDO quick-picks
-    PrimeSelector.jsx — toggle buttons for primes 3/5/7/11/13 (2 locked)
-    TuningErrorTable.jsx — color-coded grid of per-interval tuning errors
-    TuningPanel.jsx   — step 1 container
+    TuningPanel/
+      index.jsx         — step 1 container
+      EdoSelector.jsx   — number input + common-EDO quick-picks
+      PrimeSelector.jsx — toggle buttons for primes 3/5/7/11/13 (2 locked)
+      TuningErrorTable.jsx — color-coded grid of per-interval tuning errors
 ```
 
 ### Key data conventions
 - **monzo** — `number[]` of prime exponents over `[2, 3, 5, 7, 11, 13]`; e.g. `[-4, 4, -1, 0, 0, 0]` = 81/80
-- **`computeTuningError` keys** — `"smaller:larger"` format (e.g. `"2:3"`); `errorFrac` is for the *descending* interval — negate to get ascending-interval convention (+ = sharp)
+- **`computeTuningError` return** — `errors[hi][lo]` = unsigned magnitude in EDO steps for ascending interval `hi:lo` (e.g. `errors[3][2]` = error for the perfect fifth). 0 = perfect, 0.5 = worst.
 - **`commas_best.txt` score field** — this is `bestEdo`, not a quality score; lower ≠ better
 
 ## Domain: Microtonal Music
