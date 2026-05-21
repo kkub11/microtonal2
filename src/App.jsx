@@ -1,122 +1,57 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useReducer, useMemo } from 'react'
+import { computeTuningError } from './utils/edoUtils'
+import Header from './components/Header'
+import WorkflowStepper from './components/WorkflowStepper'
+import TuningPanel from './components/TuningPanel'
 
-function App() {
-  const [count, setCount] = useState(0)
+const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+const initialState = {
+  currentStep: 1,
+  // Step 1
+  edo: 53,
+  primes: [2, 3, 5],
+  // Steps 2–6 populated as we build them
 }
 
-export default App
+function reducer(state, action) {
+  switch (action.type) {
+    case 'SET_STEP':   return { ...state, currentStep: action.payload }
+    case 'SET_EDO':    return { ...state, edo: action.payload }
+    case 'SET_PRIMES': return { ...state, primes: action.payload }
+    default:           return state
+  }
+}
+
+export default function App() {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  const tuningErrors = useMemo(
+    () => computeTuningError(state.edo, state.primes),
+    [state.edo, state.primes]
+  )
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <Header />
+        <WorkflowStepper
+          steps={STEPS}
+          currentStep={state.currentStep}
+          onStepClick={(step) => dispatch({ type: 'SET_STEP', payload: step })}
+        />
+        <main className="py-8">
+          {state.currentStep === 1 && (
+            <TuningPanel
+              edo={state.edo}
+              primes={state.primes}
+              tuningErrors={tuningErrors}
+              onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
+              onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
+            />
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}
