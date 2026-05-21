@@ -26,13 +26,15 @@ played back via the Web Audio API.
 ### EDO (Equal Division of the Octave)
 Divide the octave into N equal steps. Frequency of step k:
 `freq = baseHz * 2^(k / edo)`
-Jim uses many EDOs: 19, 34, 53, 65, 87, 99, 114, 494, 612, etc.
+Jim uses many EDOs. The range below 100 is a vast musical universe.
+EDOs Jim has used: 19, 22, 34, 53, 65, 87, 99, 114, 494, 612.
 The EDO is chosen to approximate desired just ratios well.
 
 ### Prime limit
-A set of primes (e.g. [2,3,5] or [2,3,5,7,11,13]) that defines which
-just intervals are considered consonant. Higher primes = more exotic
-harmony.
+A set of primes that defines which just intervals are considered
+consonant. The standard set is [2, 3, 5, 7, 11, 13], but Jim has
+used prime 17 and potentially higher. The UI must support arbitrary
+primes, not just a fixed list.
 
 ### Just interval / ratio
 A frequency ratio p:q built from small primes. Examples:
@@ -50,9 +52,10 @@ Small error = good approximation.
 
 ### Tonnetz
 A 2D grid where each cell is an EDO pitch class.
-Moving right by dx steps = one interval (e.g. a fifth = 31 steps in 53edo).
-Moving up by dy steps = another interval (e.g. a major third = 17 steps in 53edo).
+Moving right = one interval (e.g. a fifth = 31 steps in 53-EDO).
+Moving up = another interval (e.g. a major third = 17 steps in 53-EDO).
 The axes are user-configurable — any two intervals from the prime set.
+Conventional default: x = perfect fifth (3:2), y = major third (5:4).
 
 ### Comma
 A very small interval: the gap left when a cycle of just intervals
@@ -69,6 +72,8 @@ Each line: `[e2 e3 e5 e7 e11 e13 > bestEdo`
 The comma = 2^e2 * 3^e3 * 5^e5 * 7^e7 * 11^e11 * 13^e13
 `bestEdo` = the EDO Jim recommends for traversing this comma.
 29,999 entries. EDOs range from 12 to 1992.
+Note: the file only covers primes up to 13. Commas involving primes
+17+ would need to be computed separately if the user selects them.
 
 ### Scale
 A subset of EDO pitch classes, ordered within one octave.
@@ -88,8 +93,9 @@ Shape: [numVoices][d1][d2]...[dn] where d1*d2*...*dn = numMeasures.
 Example: 3 voices, 4×4×4 = 64 measures → shape [3][4][4][4].
 Each element = an index into the scale (0..N-1).
 Neighbors in ANY dimension are harmonically related.
-This multidimensional neighbor structure is what causes phase
-transitions and fractal self-similarity.
+Neighbor topology WRAPS — position 0 and position d-1 are neighbors.
+This wrapping + multidimensional structure causes phase transitions
+and fractal self-similarity.
 
 ### Annealing algorithm
 Iteratively reassigns pitches to minimize total cost.
@@ -97,6 +103,12 @@ Each note event has ~6 neighbors (2 per dimension in the hypercube,
 plus cross-voice neighbors). The cost function has multiple terms
 (see below). Temperature controls randomness. Starting high and
 cooling slowly allows global harmonic order to emerge spontaneously.
+
+RUNTIME WARNING: The annealing algorithm runs for many millions of
+iterations and can take hours or even a full day for large EDOs or
+large arrays. Larger EDOs take longer because there are more pitch
+candidates to evaluate at each step. The UI must handle this gracefully
+via a snapshot system (see below) — do not assume a quick "done" state.
 
 ---
 
@@ -107,7 +119,7 @@ cooling slowly allows global harmonic order to emerge spontaneously.
 const tuning = {
   edo: 53,
   baseHz: 261.63,  // middle C
-  primes: [2, 3, 5, 7],
+  primes: [2, 3, 5, 7],  // can include 11, 13, 17, or any prime
 };
 
 // A just interval
@@ -125,8 +137,8 @@ const justInterval = {
 const comma = {
   monzo: [4, -10, 5, 0, -1, 1],  // exponents of [2,3,5,7,11,13]
   bestEdo: 494,
-  cents: 0.0...,         // computed: 1200 * sum(e_i * log2(p_i))
-  ratioString: "...",    // computed from monzo
+  cents: 0.0,            // computed: 1200 * sum(e_i * log2(p_i))
+  ratioString: "...",    // computed from monzo using BigInt
   primeSet: [2,3,5,11,13],  // which primes appear (non-zero exponents)
 };
 
@@ -140,7 +152,15 @@ const costTable = Float32Array(N * N);
 
 // Score array (flattened, shape stored separately)
 const scoreArray = Int16Array(numVoices * totalMeasures);
-const scoreShape = [3, 4, 4, 4];  // [voices, ...dimensions]
+const scoreShape = [3, 4, 4, 4];  // [voices, ...hypercube dimensions]
+
+// A snapshot (saved state of the annealing run)
+const snapshot = {
+  temperature: 230.5,
+  totalCost: 1992138.3,
+  scoreArray: Int16Array(...),  // copy of scoreArray at this moment
+  scoreShape: [3, 4, 4, 4],
+};
 
 // Note event (for audio playback)
 const noteEvent = {
@@ -155,12 +175,12 @@ const noteEvent = {
 
 ## Algorithm: Interval Cost Function
 
-Jim's exact method, from his email and blog posts:
+Jim's exact method, from his emails and blog posts:
 
 **Step 1: Enumerate candidate just intervals**
-For each prime p in the prime set, up to a maximum value `maxPQ` for
-p and q, enumerate all ratios p:q that are within a reasonable cents
-range (say ±50 cents) of the EDO interval being scored.
+For each combination of primes from the selected prime set, enumerate
+all ratios p:q where p and q are within `maxPQ`. Find all ratios
+whose cents value is within ±50 cents of the EDO interval being scored.
 Include ratios in both ascending and descending form.
 
 **Step 2: For each just interval p:q, compute Tenney harmonic distance**
@@ -169,25 +189,26 @@ tenney(p, q) = log2(p * q)
 ```
 Simple intervals score low (3:2 → 2.58), complex ones score high.
 
-**Step 3: Compute proximity penalty**
+**Step 3: Compute proximity factor**
 How close is this just ratio to the actual EDO interval in cents?
 ```
 proximityFactor = exp(-proximityK * abs(justCents - edoCents))
 ```
-A just interval that is far from the EDO interval contributes less.
+A just interval far from the EDO interval contributes less.
 
 **Step 4: Compute consonance contribution (inverted + powered)**
 ```
 consonance = proximityFactor / pow(tenney(p, q), power)
 ```
 `power` spreads out scores. Use small values (~1.0) for few primes,
-larger (~2.0–3.0) for many primes, to prevent flattening.
+larger (~2.0–3.0) for many primes. This counteracts the flattening
+that occurs when more primes produce more just intervals per step.
 
 **Step 5: Sum contributions, floored at 0.001**
 ```
 score[i][j] = 0.001 + sum of consonance for all matching just ratios
 ```
-The 0.001 floor ensures no interval gets score zero.
+The 0.001 floor ensures no interval ever gets score zero.
 
 **Step 6: Invert to get final cost**
 ```
@@ -195,14 +216,15 @@ cost[i][j] = 1.0 / score[i][j]
 ```
 
 **Step 7: Validate range**
-Jim checks that the table has a range from ~0.1 to ~10.
-The UI should display the min/max and let the user adjust `power`
-and `maxPQ` until the range looks good.
+Jim checks that the table has a range from ~0.1 to ~10 and manually
+adjusts parameters until it looks right. The UI must display the
+computed min/max cost and let the user adjust `power` and `maxPQ`
+until the range is satisfactory.
 
 **User-adjustable parameters:**
-- `power` (slider 0.5–4.0): spreads score range
-- `maxPQ` (number input, e.g. 100): limits which just ratios to include
-- `proximityK` (slider): strictness of the proximity penalty
+- `power` (slider 0.5–4.0): spreads score range; increase with more primes
+- `maxPQ` (number input, e.g. 100): limits which just ratios are considered
+- `proximityK` (slider): strictness of matching just ratio to EDO interval
 
 ---
 
@@ -213,12 +235,11 @@ The cost of assigning pitch `p` to a note event has FOUR terms:
 **Term 1: Harmonic neighbor cost**
 For each neighbor of this note event in the score hypercube:
 `cost += costTable[p][neighborPitch]`
-This is the main musical term. Neighbors in all dimensions must be
-consonant with each other.
+This is the main musical term. Neighbors in all hypercube dimensions
+must be consonant with each other. Neighbors wrap (modular arithmetic).
 
 **Term 2: Voice range cost**
-Each voice has a center pitch and a range. Penalize pitches far from
-center:
+Each voice has a center pitch and a range. Penalize pitches far from center:
 `cost += rangeWeight * abs(p - voiceCenter)^2`
 This keeps voices from drifting too far in pitch.
 
@@ -228,50 +249,119 @@ Penalize large melodic leaps, but modulated by the interval cost:
 Note: a dissonant small step can be worse than a consonant large leap
 (e.g. an octave may be preferred over a dissonant half-step).
 
-**Term 4: Interval comparison / thematic similarity cost (the "wild" term)**
-From the January 2025 "Comparing Intervals" post:
+**Term 4: Interval comparison / thematic similarity cost**
+From Jim's January 2025 "Comparing Intervals" blog post.
 When the same position in two different phrase repetitions is compared,
-not only should those two pitches be consonant, but the *interval*
-from the previous note to each should be similar.
-`expectedPitch = prevPitch_b + (prevPitch_a → p_a interval)`
-`cost += thematicWeight * costTable[p][expectedPitch]`
+not only should those two pitches be consonant with each other, but
+the *interval* from the previous note to each should be similar.
+If snippet A plays notes [a1, a2] and snippet B plays [b1, b2],
+the interval a1→a2 should match b1→b2. To encode this:
+`expectedPitch_b2 = b1 + (a2 - a1)`  (in EDO steps)
+`cost += thematicWeight * costTable[p][expectedPitch_b2]`
 This encodes melodic shape preservation across variations of a phrase.
+
+**Weight parameters (user-adjustable sliders):**
+- `rangeWeight`: how strictly voices stay in their range
+- `jumpWeight`: how much melodic jumps are penalized
+- `thematicWeight`: how strongly phrase shapes are preserved
 
 ---
 
 ## Algorithm: Simulated Annealing
 
 ```
-1. Initialize scoreArray randomly (or with a comma traversal pattern)
+1. Initialize scoreArray randomly (or with a comma traversal seed pattern)
 2. Set temperature T = T_start (high, e.g. 5000)
 3. Repeat many millions of times:
-   a. Pick a random note event (voice, position in hypercube)
-   b. Compute total cost of all 4 terms for current pitch
-   c. Pick a candidate new pitch from the scale (weighted by cost)
-   d. Compute cost of candidate pitch
-   e. If candidate cost < current cost: accept
-      Else: accept with probability exp(-(newCost - oldCost) / T)
-   f. Periodically decrease T by factor ~0.99 or similar schedule
-4. At each temperature snapshot, optionally save the state
-5. Sweet spot is near the phase transition temperature where
-   total system cost drops suddenly
+   a. Pick a random note event (voice + position in hypercube)
+   b. For each candidate pitch in the scale:
+      - Compute total cost of all 4 terms
+   c. Choose a pitch using weighted random selection:
+      weight(p) = exp(-cost(p) / T)
+   d. Assign the chosen pitch to this note event
+   e. Periodically (e.g. every 100,000 iterations):
+      - Decrease T by cooling factor (e.g. multiply by 0.98)
+      - Compute total system cost (sum of all note event costs)
+      - Report temperature + cost to UI via postMessage
+      - If user has requested a snapshot, save current scoreArray
+4. Sweet spot is near the phase transition where total cost drops suddenly
 ```
 
-**Temperature schedule:** Jim starts very high and multiplies by a
-factor < 1.0 each round. The graph in the Oct 2025 "Emergent Order"
-post shows a sudden cost drop around temperature 230 for a 34edo piece,
-with temperatures ranging from ~5000 down to ~50.
+**Temperature schedule:**
+Jim starts very high and multiplies by a factor < 1.0 each round.
+The Oct 2025 "Emergent Order" post shows a sudden cost drop around
+temperature 230 for a 34-EDO piece, with temperatures from ~5000 to ~50.
+The exact transition temperature varies with EDO, scale, and cost function.
 
 **Initialization options:**
-- Random: start fully random, let order emerge
+- Random: start fully random, let order emerge spontaneously
 - Seeded traversal: initialize with a repeated comma traversal pattern,
   then fix temperature at the observed transition point
 
-**Neighbor topology:**
-Each note event at position [v][d1][d2]...[dn] has neighbors:
-- 2 neighbors per dimension (±1, wrapping)
-- 1 cross-voice neighbor (same position, adjacent voice)
+**Neighbor topology (WRAPS):**
+Each note event at position [v][i1][i2]...[in] has neighbors:
+- For each dimension k: positions with ik±1 (mod dk) — WRAPS AROUND
+- 1 cross-voice neighbor: same position, adjacent voice (also wraps)
 Total ~5–7 neighbors per note event.
+The wrapping is essential — it creates the toroidal topology that
+enables the phase transition and fractal structure.
+
+---
+
+## Snapshot System (Critical UX Feature)
+
+Because annealing can run for hours or days, the app MUST NOT treat
+it as a blocking "generate then done" operation. Instead:
+
+- The annealing runs continuously in a Web Worker
+- The user can request a snapshot at any time via a button
+- Snapshots are also taken automatically at regular temperature intervals
+- Each snapshot saves: temperature, total cost, full scoreArray copy
+- The EnergyGraph plots cost vs temperature; the user clicks on the
+  curve to take a snapshot at that point or to select an existing one
+- The OutputPanel (FoldedScore, playback) displays whichever snapshot
+  is currently selected
+- The user can compare multiple snapshots and pick the most musical one
+- The annealing can be paused, resumed, or stopped at any time
+
+This matches Jim's actual workflow: he takes 18 snapshots and listens
+to each to find the sweet spot near the phase transition.
+
+---
+
+## EDO Selector Design
+
+The EDO selector should have two modes:
+1. **Preset dropdown** with named EDOs Jim has actually used:
+   - 12 (standard Western, baseline reference)
+   - 19 (meantone, conventional note names work)
+   - 22 (magic comma territory)
+   - 34 (diaschisma temperament)
+   - 53 (Pythagorean/Hanson, very accurate fifths)
+   - 65
+   - 87
+   - 99
+   - 114
+   - 494 (very high precision)
+   - 612 (extreme precision)
+2. **Custom number input** for any EDO the user wants to try
+
+Below 100 is described by Jim as "already a vast universe."
+Above 100 is "fun enough" but takes longer to compute.
+
+---
+
+## Prime Selector Design
+
+Do NOT use a fixed list of checkboxes. The UI should:
+1. Show standard primes as quick-toggle buttons: 3, 5, 7, 11, 13
+2. Include an "Add prime" text input where the user can type any number
+3. Validate that the entered number is actually prime before accepting
+4. Display custom primes alongside the standard ones with a remove button
+5. Note that the comma file (commas_best.txt) only covers primes 2,3,5,7,11,13.
+   If the user selects prime 17 or higher, the comma file cannot be used
+   for comma selection — warn the user and disable that step, or allow
+   manual comma entry.
 
 ---
 
@@ -279,10 +369,9 @@ Total ~5–7 neighbors per note event.
 
 **Rhythm:**
 - Measures are equal length
-- Each measure is divided into note events
-- Duration divisions: ÷2, ÷3, ÷4, ÷5 (user selects which are allowed)
-- Multiple patterns of divisions per piece (up to 8 different patterns)
-- Patterns distributed across measures recursively (DDCDDCBDDCDDCBA...)
+- Each measure is divided by one of: ÷2, ÷3, ÷4, or ÷5 (user enables each)
+- Multiple different division patterns can exist in one piece
+- Patterns distributed across measures recursively: DDCDDCBDDCDDCBA...
 - Pattern assignment can be correlated or independent between voices
 
 **Pitch to frequency:**
@@ -291,8 +380,9 @@ Total ~5–7 neighbors per note event.
 **Web Audio synthesis:**
 - OscillatorNode + GainNode per note
 - Waveform: sine / triangle / sawtooth (user selects)
-- Schedule using audioCtx.currentTime offsets (not setTimeout)
-- Envelope: short attack + decay to avoid clicks
+- Schedule using audioCtx.currentTime offsets (NEVER setTimeout)
+- Short attack + decay envelope on each note to avoid clicks
+- Create AudioContext only on user gesture (browser security requirement)
 
 ---
 
@@ -304,17 +394,18 @@ Total ~5–7 neighbors per note event.
 ├── <WorkflowStepper steps={1..6} current={step} />
 │
 ├── [Step 1] <TuningPanel>
-│   ├── <EdoSelector />           number input; suggest from comma bestEdo
-│   ├── <PrimeSelector />         toggles for 3, 5, 7, 11, 13
-│   └── <TuningErrorTable />      computed grid, rows×cols = prime pairs
+│   ├── <EdoSelector />           preset dropdown + custom number input
+│   ├── <PrimeSelector />         standard toggles + custom prime input
+│   └── <TuningErrorTable />      computed grid, rows×cols = interval pairs
 │
 ├── [Step 2] <TonnetzPanel>
 │   ├── <AxisPicker axis="x" />   pick interval from prime set
 │   ├── <AxisPicker axis="y" />   pick interval from prime set
-│   └── <TonnetzGrid />           SVG; cells = pitch classes; arrows = intervals
+│   └── <TonnetzGrid />           SVG; cells = pitch classes; colored arrows
 │
 ├── [Step 3] <CommaScalePanel>
 │   ├── <CommaList />             filtered by selected primes + edo
+│   │                             disabled/warned if primes > 13
 │   ├── <CommaDetail />           shows path on Tonnetz, cents size
 │   └── <ScaleBuilder />          auto (2-prime) or manual (3+ prime)
 │
@@ -324,15 +415,18 @@ Total ~5–7 neighbors per note event.
 │   └── <VoiceSettings />         center pitch + range per voice
 │
 ├── [Step 5] <CompositionPanel>
-│   ├── <ArrayShapeSelector />    e.g. 4×4×4, 7×7×7, 12×12
+│   ├── <ArrayShapeSelector />    e.g. 4×4×4, 7×7×7, 12×12, 2^8
 │   ├── <VoiceCountSelector />    1–4
-│   ├── <TemperatureControls />   T_start, cooling rate, num iterations
+│   ├── <TemperatureControls />   T_start, cooling rate
 │   ├── <RhythmSelector />        checkboxes ÷2 ÷3 ÷4 ÷5
 │   ├── <WeightSliders />         rangeWeight, jumpWeight, thematicWeight
-│   ├── <GenerateButton />        runs annealing (web worker)
-│   └── <EnergyGraph />           live cost vs temperature plot
+│   ├── <RuntimeEstimate />       warn user if config will take a long time
+│   ├── <GenerateButton />        start/pause/stop annealing (web worker)
+│   ├── <EnergyGraph />           live cost vs temperature; click to snapshot
+│   └── <SnapshotList />          list of saved snapshots; click to preview
 │
 └── [Step 6] <OutputPanel>
+    ├── <SnapshotSelector />      which snapshot is being displayed/played
     ├── <FoldedScore />           SVG: time on x, pitch (mod octave) on y
     ├── <PlaybackControls />      play/pause/stop, tempo BPM
     ├── <WaveformSelector />      sine/triangle/sawtooth
@@ -349,9 +443,10 @@ src/
     edoUtils.js         frequency math, tuning error computation
     commaUtils.js       parse commas_best.txt, filter, monzo math
     costFunction.js     interval cost table builder
-    annealing.js        simulated annealing engine
+    annealing.js        simulated annealing engine (called from worker)
     audioEngine.js      Web Audio API scheduler
     rhythmUtils.js      measure division, pattern distribution
+    primeUtils.js       primality test, prime enumeration
   components/
     Header.jsx
     WorkflowStepper.jsx
@@ -381,16 +476,19 @@ src/
       TemperatureControls.jsx
       RhythmSelector.jsx
       WeightSliders.jsx
+      RuntimeEstimate.jsx
       GenerateButton.jsx
       EnergyGraph.jsx
+      SnapshotList.jsx
     OutputPanel/
       index.jsx
+      SnapshotSelector.jsx
       FoldedScore.jsx
       PlaybackControls.jsx
       WaveformSelector.jsx
       AudioEngine.jsx
   workers/
-    annealing.worker.js   run annealing in background thread
+    annealing.worker.js   Web Worker: runs annealing, posts progress + snapshots
   App.jsx
   main.jsx
 public/
@@ -399,51 +497,69 @@ public/
 
 ---
 
-## Build Order (one session per item)
+## Build Order (one Claude Code session per item)
 
-1. `edoUtils.js` — getStepFreq, getBestApprox, computeTuningError
-2. `commaUtils.js` — parse file, monzoToCents, monzoToRatio, filterCommas
-3. `<TuningPanel>` — EDO input, prime toggles, tuning error table display
-4. `<TonnetzGrid>` — SVG grid with configurable axes and interval arrows
-5. `<CommaList>` + `<CommaDetail>` — filterable comma selector
+Session 1 is DONE (TuningPanel exists). Continue from session 2.
+
+1. ~~`edoUtils.js` + `<TuningPanel>`~~ DONE
+2. `primeUtils.js` — isPrime, nextPrime; update PrimeSelector to support
+   custom prime input and validate entries
+3. `commaUtils.js` — parse commas_best.txt, monzoToCents, monzoToRatio
+   (BigInt), filterCommas by primes and edo
+4. `<TonnetzGrid>` — SVG grid with configurable axes and colored arrows
+5. `<CommaList>` + `<CommaDetail>` — filterable comma selector wired to
+   commaUtils; show path on Tonnetz
 6. `<ScaleBuilder>` — auto (2-prime circulation) + manual Tonnetz picker
 7. `costFunction.js` + `<CostTable>` display with param sliders
-8. `annealing.js` in a Web Worker — test with console output first
-9. `<CompositionPanel>` + `<EnergyGraph>` — wire up annealing
+8. `annealing.worker.js` — Web Worker with full annealing loop; posts
+   {temperature, totalCost, snapshot?} messages; supports pause/stop
+9. `<CompositionPanel>` — wire up worker, EnergyGraph, SnapshotList,
+   RuntimeEstimate, start/pause/stop controls
 10. `rhythmUtils.js` + `audioEngine.js` — score to note events to sound
-11. `<FoldedScore>` — SVG visualization
+11. `<OutputPanel>` — FoldedScore SVG, playback controls, snapshot selector
 12. Polish, accessibility, Tailwind theming
 
 ---
 
 ## Important Implementation Notes
 
-- **Annealing must run in a Web Worker** — it runs millions of iterations
-  and will freeze the UI if run on the main thread. Use postMessage to
-  send progress updates (current temperature, total cost) back to the
-  main thread for the EnergyGraph.
+- **Annealing in Web Worker is non-negotiable** — runs millions of
+  iterations, will freeze the UI on the main thread. Use postMessage
+  for progress (temperature, cost) and snapshot data. Support pause
+  (stop iterating but keep state) and stop (terminate worker).
 
-- **commas_best.txt is large** — fetch it once on app load, parse into
-  a JS array, store in React context. Do not re-fetch on every render.
+- **Snapshot system is critical** — the whole UX depends on the user
+  being able to browse results at different temperatures. Each snapshot
+  needs a full copy of scoreArray. At ~10,000 note events of Int16,
+  one snapshot is ~20KB — storing 20 snapshots is fine.
 
-- **Monzo arithmetic uses large integers** — numerators/denominators of
-  commas like [4,-10,5,0,-1,1] can exceed Number.MAX_SAFE_INTEGER.
-  Use BigInt for ratio computation. Cents values are fine as Float64.
+- **commas_best.txt loading** — fetch once on app load, parse into a
+  JS array, store in React context. The file is ~700KB. Parse lazily
+  if needed. Do not re-fetch or re-parse on every render.
 
-- **Cost table size** — for a 20-note scale, the table is 20×20 = 400
-  entries, trivial. For a 52-note scale, 2704 entries, still fine.
+- **Monzo arithmetic uses BigInt** — numerators/denominators of comma
+  ratios can exceed Number.MAX_SAFE_INTEGER easily. Use BigInt for all
+  ratio arithmetic. Cents values use regular Float64.
 
-- **Audio scheduling** — always use audioCtx.currentTime + offset for
-  scheduling. Never use setTimeout for audio timing. Create a new
-  AudioContext only on user gesture (browser requirement).
+- **Wrapping neighbors** — neighbor lookup at position [v][i1]...[in]
+  wraps: neighbor at dimension k is [(ik + 1) % dk] and [(ik - 1 + dk) % dk].
+  This is essential for the physics to work correctly.
 
-- **The phase transition temperature varies** — it depends on EDO, scale,
-  and cost function. The EnergyGraph should make it visually obvious
-  where the transition is so the user can identify the sweet spot.
+- **Cost table validation** — after computing the cost table, display
+  the actual min and max values. If the range is not roughly 0.1–10,
+  prompt the user to adjust `power` or `maxPQ`. Jim does this manually
+  by printing the table; the UI makes it visual.
 
-- **Score array indexing** — flatten the multi-dimensional array to 1D
-  for performance. Store shape separately. Neighbor lookup must wrap
-  around (modular arithmetic) in each dimension.
+- **Prime > 13 warning** — commas_best.txt only covers primes 2,3,5,7,
+  11,13. If user adds prime 17+, warn that comma filtering is unavailable
+  and the user must construct the scale and comma manually.
+
+- **Audio context on gesture** — create AudioContext only after a user
+  click (browser security requirement). Never create it on page load.
+
+- **Score array flattening** — store as a flat TypedArray with shape
+  metadata. For shape [3,4,4,4], index [v][i][j][k] maps to
+  v*64 + i*16 + j*4 + k. Compute strides from shape on init.
 
 ---
 
