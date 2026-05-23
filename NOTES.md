@@ -634,11 +634,11 @@ public/
 Session 1 (TuningPanel) is DONE. Continue from session 2.
 
 1. ~~TuningPanel~~ DONE
-2. primeUtils.js + update PrimeSelector to support custom prime input
-3. commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
-   filterCommas by primes and edo
-4. TonnetzGrid — scrollable/zoomable canvas, configurable axes,
-   colored interval arrows, repeating pitch class labels
+2. ~~primeUtils.js + update PrimeSelector to support custom prime input~~ DONE
+3. ~~commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
+   filterCommas by primes and edo~~ DONE
+4. ~~TonnetzGrid — scrollable/zoomable canvas, configurable axes,
+   colored interval arrows, repeating pitch class labels~~ DONE
 5. CommaList + CommaDetail — filterable comma selector, path on Tonnetz
 6. ScaleBuilder — auto (2-prime circulation) + manual Tonnetz picker
 7. costFunction.js + CostTable display with param sliders

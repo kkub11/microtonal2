@@ -1,36 +1,63 @@
+import { useState, useRef, useEffect, useMemo } from 'react'
+
 const CELL = 44
 const GAP = 3
 const STEP = CELL + GAP
-const GRID_W = 13
-const GRID_H = 9
-const CX = Math.floor(GRID_W / 2)  // column index of origin
-const CY = Math.floor(GRID_H / 2)  // row index of origin (SVG row)
 
 const X_COLOR = '#7c3aed'
 const Y_COLOR = '#0891b2'
 
-function pitchHue(pc, edo) {
-  return (pc / edo) * 360
-}
-
 function pitchFill(pc, edo) {
-  return `hsl(${pitchHue(pc, edo)}, 68%, 48%)`
+  return `hsl(${(pc / edo) * 360}, 68%, 48%)`
 }
 
-function ArrowMarkers() {
-  return (
-    <defs>
-      <marker id="arr-x" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-        <path d="M0,0.5 L6,3.5 L0,6.5 Z" fill={X_COLOR} />
-      </marker>
-      <marker id="arr-y" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-        <path d="M0,0.5 L6,3.5 L0,6.5 Z" fill={Y_COLOR} />
-      </marker>
-    </defs>
-  )
-}
+const btnClass = [
+  'px-2 py-1 text-xs font-semibold rounded-md',
+  'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+  'hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors',
+].join(' ')
 
 export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval }) {
+  const [scale, setScale] = useState(1)
+  const containerRef = useRef(null)
+
+  // Grid large enough that the pitch-class repeat pattern is visible.
+  // Horizontal period = edo / gcd(edo, xSteps); use edo+4 as a safe upper bound.
+  // Cap at 120×70 to keep SVG element count manageable (~8400 cells).
+  const COLS = Math.max(25, Math.min(120, edo + 4))
+  const ROWS = Math.max(17, Math.min(70, Math.ceil(edo / 2) + 2))
+  const CX = Math.floor(COLS / 2)
+  const CY = Math.floor(ROWS / 2)
+
+  const svgW = COLS * STEP - GAP
+  const svgH = ROWS * STEP - GAP
+
+  const scrollToOrigin = () => {
+    const el = containerRef.current
+    if (!el) return
+    // Origin cell center in scaled pixels
+    const cellCX = (CX * STEP + CELL / 2) * scale
+    const cellCY = (CY * STEP + CELL / 2) * scale
+    el.scrollLeft = cellCX - el.clientWidth / 2
+    el.scrollTop = cellCY - el.clientHeight / 2
+  }
+
+  // Re-center origin whenever scale or grid dimensions change
+  useEffect(() => { scrollToOrigin() }, [scale, CX, CY]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cells = useMemo(() => {
+    const out = []
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const dx = col - CX
+        const dy = CY - row  // lattice y increases upward; SVG y increases downward
+        const pc = ((dx * xSteps + dy * ySteps) % edo + edo) % edo
+        out.push({ col, row, dx, dy, pc, x: col * STEP, y: row * STEP })
+      }
+    }
+    return out
+  }, [COLS, ROWS, CX, CY, xSteps, ySteps, edo])
+
   if (xSteps === 0 || ySteps === 0) {
     return (
       <p className="text-sm text-amber-600 dark:text-amber-400">
@@ -46,89 +73,104 @@ export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval 
     )
   }
 
-  const svgW = GRID_W * STEP - GAP
-  const svgH = GRID_H * STEP - GAP
-
-  // Origin cell position in SVG space (top-left corner of cell)
-  const ox = CX * STEP
-  const oy = CY * STEP
-  // Note centers
-  const originCX = ox + CELL / 2
-  const originCY = oy + CELL / 2
-  // x-neighbor: dx=+1, dy=0 → SVG col CX+1, row CY
+  // Arrow endpoints in unscaled SVG coordinates
+  const originCX = CX * STEP + CELL / 2
+  const originCY = CY * STEP + CELL / 2
   const xNeighborCX = (CX + 1) * STEP + CELL / 2
-  // y-neighbor: dy=+1 (lattice up) → SVG row CY-1
   const yNeighborCY = (CY - 1) * STEP + CELL / 2
-
-  const cells = []
-  for (let row = 0; row < GRID_H; row++) {
-    for (let col = 0; col < GRID_W; col++) {
-      const dx = col - CX
-      const dy = CY - row  // lattice y increases upward; SVG y increases downward
-      const pc = ((dx * xSteps + dy * ySteps) % edo + edo) % edo
-      cells.push({ col, row, dx, dy, pc, x: col * STEP, y: row * STEP })
-    }
-  }
 
   return (
     <div>
-      <svg
-        width={svgW}
-        height={svgH}
-        style={{ display: 'block', overflow: 'visible' }}
-        aria-label="Tonnetz grid"
+      {/* Controls */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-xs text-slate-500 dark:text-slate-400">Zoom</span>
+        <button
+          className={btnClass}
+          onClick={() => setScale(s => Math.max(0.25, parseFloat((s - 0.25).toFixed(2))))}
+          aria-label="Zoom out"
+        >−</button>
+        <span className="text-xs w-10 text-center text-slate-600 dark:text-slate-400">
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          className={btnClass}
+          onClick={() => setScale(s => Math.min(2, parseFloat((s + 0.25).toFixed(2))))}
+          aria-label="Zoom in"
+        >+</button>
+        <button className={btnClass} onClick={() => setScale(1)}>Reset zoom</button>
+        <button className={btnClass} onClick={scrollToOrigin}>Center</button>
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {COLS}×{ROWS} cells
+        </span>
+      </div>
+
+      {/* Scrollable viewport */}
+      <div
+        ref={containerRef}
+        className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-700"
+        style={{ maxHeight: 420 }}
       >
-        <ArrowMarkers />
+        {/* SVG width/height encode the scaled render size; viewBox keeps coordinates unscaled */}
+        <svg
+          width={svgW * scale}
+          height={svgH * scale}
+          viewBox={`0 0 ${svgW} ${svgH}`}
+          style={{ display: 'block' }}
+          aria-label="Tonnetz grid"
+        >
+          <defs>
+            <marker id="arr-x" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0.5 L6,3.5 L0,6.5 Z" fill={X_COLOR} />
+            </marker>
+            <marker id="arr-y" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0.5 L6,3.5 L0,6.5 Z" fill={Y_COLOR} />
+            </marker>
+          </defs>
 
-        {/* Cells */}
-        {cells.map(({ col, row, dx, dy, pc, x, y }) => {
-          const isOrigin = dx === 0 && dy === 0
-          const isXNeighbor = dx === 1 && dy === 0
-          const isYNeighbor = dx === 0 && dy === 1
-          return (
-            <g key={`${col}-${row}`}>
-              <rect
-                x={x} y={y}
-                width={CELL} height={CELL}
-                rx={5}
-                fill={pitchFill(pc, edo)}
-                stroke={
-                  isOrigin ? '#fff'
-                  : isXNeighbor ? X_COLOR
-                  : isYNeighbor ? Y_COLOR
-                  : 'none'
-                }
-                strokeWidth={isOrigin ? 2.5 : (isXNeighbor || isYNeighbor) ? 2 : 0}
-              />
-              <text
-                x={x + CELL / 2}
-                y={y + CELL / 2 + 5}
-                textAnchor="middle"
-                fontSize={isOrigin ? 14 : 12}
-                fontWeight={isOrigin ? 'bold' : 'normal'}
-                fill="white"
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {pc}
-              </text>
-            </g>
-          )
-        })}
+          {cells.map(({ col, row, dx, dy, pc, x, y }) => {
+            const isOrigin = dx === 0 && dy === 0
+            const isXNeighbor = dx === 1 && dy === 0
+            const isYNeighbor = dx === 0 && dy === 1
+            return (
+              <g key={`${col}-${row}`}>
+                <rect
+                  x={x} y={y} width={CELL} height={CELL} rx={5}
+                  fill={pitchFill(pc, edo)}
+                  stroke={
+                    isOrigin ? '#fff'
+                    : isXNeighbor ? X_COLOR
+                    : isYNeighbor ? Y_COLOR
+                    : 'none'
+                  }
+                  strokeWidth={isOrigin ? 2.5 : (isXNeighbor || isYNeighbor) ? 2 : 0}
+                />
+                <text
+                  x={x + CELL / 2} y={y + CELL / 2 + 5}
+                  textAnchor="middle"
+                  fontSize={isOrigin ? 14 : 12}
+                  fontWeight={isOrigin ? 'bold' : 'normal'}
+                  fill="white"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >{pc}</text>
+              </g>
+            )
+          })}
 
-        {/* Axis arrows from origin to axis neighbors */}
-        <line
-          x1={originCX} y1={originCY}
-          x2={xNeighborCX - 12} y2={originCY}
-          stroke={X_COLOR} strokeWidth={2.5} strokeOpacity={0.9}
-          markerEnd="url(#arr-x)"
-        />
-        <line
-          x1={originCX} y1={originCY}
-          x2={originCX} y2={yNeighborCY + 12}
-          stroke={Y_COLOR} strokeWidth={2.5} strokeOpacity={0.9}
-          markerEnd="url(#arr-y)"
-        />
-      </svg>
+          {/* Axis arrows from origin to immediate neighbors */}
+          <line
+            x1={originCX} y1={originCY}
+            x2={xNeighborCX - 12} y2={originCY}
+            stroke={X_COLOR} strokeWidth={2.5} strokeOpacity={0.9}
+            markerEnd="url(#arr-x)"
+          />
+          <line
+            x1={originCX} y1={originCY}
+            x2={originCX} y2={yNeighborCY + 12}
+            stroke={Y_COLOR} strokeWidth={2.5} strokeOpacity={0.9}
+            markerEnd="url(#arr-y)"
+          />
+        </svg>
+      </div>
 
       {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-4 text-xs">
@@ -139,7 +181,7 @@ export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval 
           ↑ {yInterval.ratio[0]}:{yInterval.ratio[1]} = {ySteps} steps
         </span>
         <span className="text-slate-400 dark:text-slate-500">
-          Highlighted border: axis neighbors of pitch class 0
+          Bordered cells = axis neighbors of pitch class 0
         </span>
       </div>
     </div>

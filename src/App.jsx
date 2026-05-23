@@ -4,6 +4,7 @@ import Header from './components/Header'
 import WorkflowStepper from './components/WorkflowStepper'
 import TuningPanel from './components/TuningPanel'
 import TonnetzPanel from './components/TonnetzPanel'
+import CommaScalePanel from './components/CommaScalePanel'
 
 const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
@@ -15,7 +16,9 @@ const initialState = {
   // Step 2
   xInterval: { ratio: [3, 2] },
   yInterval: { ratio: [5, 4] },
-  // Steps 3–6 populated as we build them
+  // Step 3
+  selectedComma: null,
+  // Steps 4–6 populated as we build them
 }
 
 function reducer(state, action) {
@@ -24,8 +27,9 @@ function reducer(state, action) {
     case 'SET_EDO':    return { ...state, edo: action.payload }
     case 'SET_PRIMES':     return { ...state, primes: action.payload }
     case 'SET_X_INTERVAL': return { ...state, xInterval: action.payload }
-    case 'SET_Y_INTERVAL': return { ...state, yInterval: action.payload }
-    default:               return state
+    case 'SET_Y_INTERVAL':   return { ...state, yInterval: action.payload }
+    case 'SET_COMMA':        return { ...state, selectedComma: action.payload }
+    default:                 return state
   }
 }
 
@@ -54,6 +58,16 @@ export default function App() {
               tuningErrors={tuningErrors}
               onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
               onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
+            />
+          )}
+          {state.currentStep === 3 && (
+            <CommaScalePanel
+              edo={state.edo}
+              primes={state.primes}
+              xInterval={state.xInterval}
+              yInterval={state.yInterval}
+              selectedComma={state.selectedComma}
+              onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
             />
           )}
           {state.currentStep === 2 && (
