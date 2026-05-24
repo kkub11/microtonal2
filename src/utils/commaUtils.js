@@ -37,16 +37,44 @@ export function monzoToCents(monzo) {
   return cents
 }
 
-// edoTolerance: fraction of edo (e.g. 0.15 = ±15%)
-export function filterCommas(commas, primes, edo, edoTolerance = 0.15) {
+// A comma is tempered out by an EDO if and only if it maps to exactly 0 steps.
+export function isTempered(monzo, edo) {
+  let steps = 0
+  for (let i = 0; i < monzo.length; i++) {
+    if (monzo[i] !== 0) {
+      steps += monzo[i] * Math.round(edo * Math.log2(PRIMES[i]))
+    }
+  }
+  return steps === 0
+}
+
+// Both canonical and inverse forms are recognised.
+const NAMED_COMMAS = {
+  '-15,8,1,0,0,0':  'Schisma',
+  '15,-8,-1,0,0,0': 'Schisma',
+  '-6,-5,6,0,0,0':  'Kleisma',
+  '6,5,-6,0,0,0':   'Kleisma',
+  '-4,4,-1,0,0,0':  'Syntonic comma',
+  '4,-4,1,0,0,0':   'Syntonic comma',
+  '-5,2,2,-1,0,0':  'Marvel comma',
+  '5,-2,-2,1,0,0':  'Marvel comma',
+  '-19,12,0,0,0,0': 'Pythagorean comma',
+  '19,-12,0,0,0,0': 'Pythagorean comma',
+}
+
+export function getCommaName(monzo) {
+  return NAMED_COMMAS[monzo.join(',')] ?? null
+}
+
+export function filterCommas(commas, primes, edo) {
   const allowedIndices = new Set(
     primes.map(p => PRIMES.indexOf(p)).filter(i => i !== -1)
   )
-  return commas.filter(({ monzo, bestEdo }) => {
+  return commas.filter(({ monzo }) => {
     for (let i = 0; i < monzo.length; i++) {
       if (monzo[i] !== 0 && !allowedIndices.has(i)) return false
     }
-    return Math.abs(bestEdo - edo) / edo <= edoTolerance
+    return isTempered(monzo, edo)
   })
 }
 

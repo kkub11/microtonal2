@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useCommas } from '../../contexts/CommaContext'
-import { filterCommas, monzoToCents, monzoToRatio } from '../../utils/commaUtils'
+import { filterCommas, monzoToCents, monzoToRatio, getCommaName } from '../../utils/commaUtils'
 
 const MAX_DISPLAY = 200
 const MAX_COMMA_PRIME = 13
@@ -36,7 +36,8 @@ export default function CommaList({ edo, primes, selectedComma, onSelect }) {
         const cents = monzoToCents(c.monzo)
         const ratio = monzoToRatio(c.monzo)
         const label = ratioString(ratio) ?? monzoLabel(c.monzo)
-        return { ...c, cents, label }
+        const name = getCommaName(c.monzo)
+        return { ...c, cents, label, name }
       })
       .sort((a, b) => Math.abs(a.cents) - Math.abs(b.cents))
       .slice(0, MAX_DISPLAY)
@@ -95,8 +96,15 @@ export default function CommaList({ edo, primes, selectedComma, onSelect }) {
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800',
                   ].join(' ')}
                 >
-                  <span className="font-mono text-xs text-slate-800 dark:text-slate-200 truncate min-w-0">
-                    {c.label}
+                  <span className="min-w-0 truncate">
+                    {c.name && (
+                      <span className="block text-xs font-semibold text-violet-600 dark:text-violet-400 leading-none mb-0.5">
+                        {c.name}
+                      </span>
+                    )}
+                    <span className="font-mono text-xs text-slate-800 dark:text-slate-200">
+                      {c.label}
+                    </span>
                   </span>
                   <span className={`text-xs font-semibold tabular-nums shrink-0 ${centsColor(Math.abs(c.cents))}`}>
                     {c.cents >= 0 ? '+' : ''}{c.cents.toFixed(2)}¢

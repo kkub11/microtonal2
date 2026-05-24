@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { monzoToRatio, monzoToCents, commaToTonnetzPath } from '../../utils/commaUtils'
+import { monzoToRatio, monzoToCents, commaToTonnetzPath, getCommaName } from '../../utils/commaUtils'
 import { getBestApprox } from '../../utils/edoUtils'
 
 const CELL = 36
@@ -153,6 +153,7 @@ export default function CommaDetail({ comma, edo, xInterval, yInterval }) {
     numerator <= 999_999_999n && denominator <= 999_999_999n
       ? `${numerator}/${denominator}`
       : null
+  const name = getCommaName(comma.monzo)
 
   return (
     <div>
@@ -161,6 +162,12 @@ export default function CommaDetail({ comma, edo, xInterval, yInterval }) {
       </label>
 
       <dl className="space-y-1.5 text-sm">
+        {name && (
+          <div className="flex gap-3">
+            <dt className="w-16 shrink-0 text-slate-500 dark:text-slate-400">Name</dt>
+            <dd className="font-semibold text-violet-700 dark:text-violet-400">{name}</dd>
+          </div>
+        )}
         {compactRatio && (
           <div className="flex gap-3">
             <dt className="w-16 shrink-0 text-slate-500 dark:text-slate-400">Ratio</dt>
