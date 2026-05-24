@@ -634,12 +634,12 @@ public/
 Session 1 (TuningPanel) is DONE. Continue from session 2.
 
 1. ~~TuningPanel~~ DONE
-2. ~~primeUtils.js + update PrimeSelector to support custom prime input~~ DONE
-3. ~~commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
-   filterCommas by primes and edo~~ DONE
-4. ~~TonnetzGrid — scrollable/zoomable canvas, configurable axes,
-   colored interval arrows, repeating pitch class labels~~ DONE
-5. ~~CommaList + CommaDetail — filterable comma selector, path on Tonnetz~~ DONE
+2. primeUtils.js + update PrimeSelector to support custom prime input
+3. commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
+   filterCommas by primes and edo
+4. TonnetzGrid — scrollable/zoomable canvas, configurable axes,
+   colored interval arrows, repeating pitch class labels
+5. CommaList + CommaDetail — filterable comma selector, path on Tonnetz
 6. ScaleBuilder — auto (2-prime circulation) + manual Tonnetz picker
 7. costFunction.js + CostTable display with param sliders
 8. annealing.worker.js — continuous loop, SET_TEMPERATURE / SNAPSHOT /
@@ -675,23 +675,17 @@ Different voices have different numbers of note events (1984, 1530,
 2873 in the sample). The rhythm system generates independently per
 voice. Each voice's total events = d1 × d2 × ... × dn (measures),
 but within those measures, subdivision produces different counts.
-Wait — this needs clarification. See open question below.
+The different voice note counts (1984, 1530, 2873) reflect independent
+per-voice rhythm generation, with each measure subdivided into multiple
+events. 512 measures × ~4 avg subdivisions ≈ 2048 events per voice,
+consistent with the observed counts.
 
-**OPEN QUESTION:**
-In the sample file, voice note counts (1984, 1530, 2873) do NOT all
-equal 512 (the number of measures). This means either:
-  a) Each measure contains multiple note events (from subdivision), OR
-  b) Some measures are rests (reducing count), OR
-  c) Both
-The score array has exactly numVoices × numMeasures elements (one
-pitch per measure per voice), but the rhythm system subdivides each
-measure into multiple audio events. So 512 measures × ~4 avg
-subdivisions ≈ 2048 events for a voice — consistent with observed
-counts. This confirms: score array = one pitch per measure per voice;
-rhythm system = generates multiple timed events per measure.
-Each subdivided event within a measure uses the SAME pitch (the one
-from the score array for that measure). Pitch variation comes from
-the annealing at the measure level, not within measures.
+The score array has one pitch element per vertex (one per measure per
+voice). Each measure is then subdivided by the rhythm system into
+multiple timed note events. Pitches VARY within a measure — each
+subdivided event gets its own pitch from the score array, because
+the score array has one vertex per note event, not one per measure.
+(Confirmed by Jim: "yeah, pitches vary within a measure, for sure!")
 
 **Annealing worker message protocol:**
   Main → Worker: { type: 'SET_TEMPERATURE', value: T }
