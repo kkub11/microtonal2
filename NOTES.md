@@ -634,11 +634,11 @@ public/
 Session 1 (TuningPanel) is DONE. Continue from session 2.
 
 1. ~~TuningPanel~~ DONE
-2. ~~primeUtils.js + update PrimeSelector to support custom prime input~~ DONE
-3. ~~commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
-   filterCommas by primes and edo~~ DONE
-4. ~~TonnetzGrid — scrollable/zoomable canvas, configurable axes,
-   colored interval arrows, repeating pitch class labels~~ DONE
+2. primeUtils.js + update PrimeSelector to support custom prime input
+3. commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
+   filterCommas by primes and edo
+4. TonnetzGrid — scrollable/zoomable canvas, configurable axes,
+   colored interval arrows, repeating pitch class labels
 5. CommaList + CommaDetail — filterable comma selector, path on Tonnetz
 6. ScaleBuilder — auto (2-prime circulation) + manual Tonnetz picker
 7. costFunction.js + CostTable display with param sliders
@@ -753,3 +753,159 @@ Add recursive subdivision only after simple version is verified.
   https://interdependentscience.blogspot.com/2026/01/tamp-it-down.html
 - All parameters described:
   https://interdependentscience.blogspot.com/2026/01/lost-in-space.html
+
+---
+
+## Comma Selection and Filtering (Critical Update)
+
+### The 53edo Commas File (`53edo_commas2.txt`)
+
+Jim provided a second comma file: the result of his code computing all
+musically relevant commas specifically for 53-EDO. This is the model
+for how comma lists should be generated per EDO.
+
+Format of each line:
+  {ratio} = {cents_signed}, {monzo}
+Example:
+  32768:32805 = -1.953720787934038, [15 -8 -1 0 0 0 >
+
+The file contains 474 commas for 53-EDO. Key observations:
+- Only 3 commas involve only primes up to 5 (the "simplest" commas)
+- 25 commas involve primes up to 7
+- 103 commas involve primes up to 11
+- 343 commas involve primes up to 13
+- Filtering by prime selection drastically reduces the list
+
+**Well-known commas confirmed present:**
+- Schisma:  32768:32805 = 1.95¢  monzo=[15,-8,-1,0,0,0]  (primes 3,5)
+- Kleisma:  15552:15625 = 8.11¢  monzo=[6,5,-6,0,0,0]    (primes 3,5)
+
+These are the "usual choices" Jim said were missing from the app's
+current comma list. The schisma and kleisma are the two most important
+commas for 53-EDO and should always appear prominently.
+
+### Why the Current App's Comma List Is Wrong
+
+Jim said: "I do not see the usual choices in this list." The problem
+is that `commas_best.txt` is a general file where each comma is paired
+with its BEST EDO. When filtered for 53-EDO, it returns only commas
+whose bestEdo field equals 53. But 53-EDO also tempers out commas
+whose bestEdo is some other value — the schisma's bestEdo is not 53,
+yet 53-EDO tempers it out perfectly well.
+
+### The Correct Filtering Approach
+
+A comma is tempered out by an EDO if and only if the EDO maps the
+comma to zero steps — i.e., the comma's size in EDO steps rounds to 0.
+
+  stepsForComma = sum(monzo[i] * bestStep(edo, prime[i]))
+  isTempered = (stepsForComma == 0)
+
+where bestStep(edo, p) = round(edo * log2(p)) for each prime p.
+
+The correct algorithm for building the comma list for a given EDO:
+1. For each comma in commas_best.txt (or computed dynamically):
+   a. Compute how many EDO steps it maps to
+   b. If exactly 0 steps: this comma IS tempered out by this EDO
+   c. Include it in the filtered list
+2. Additionally filter by selected prime set (only include commas
+   whose non-zero monzo entries correspond to selected primes)
+3. Sort by comma size in cents (smaller = simpler = more musical)
+4. Limit to a practical number (Jim says "around half a dozen" is
+   usually good enough)
+
+This is a significant change from the current approach of filtering
+by bestEdo == selectedEdo.
+
+### Default Comma Suggestions Per EDO
+
+For well-known EDOs, the app should suggest the canonical commas
+by name. Known named commas to include:
+
+| Name          | Ratio       | Cents  | Monzo           | EDOs              |
+|---------------|-------------|--------|-----------------|-------------------|
+| Schisma       | 32805:32768 | 1.95¢  | [-15,8,1,0,0,0] | 53, 118, and more |
+| Kleisma       | 15625:15552 | 8.11¢  | [-6,-5,6,0,0,0] | 53, 72, and more  |
+| Syntonic comma| 81:80       | 21.51¢ | [-4,4,-1,0,0,0] | 12, 19, 31...     |
+| Marvel comma  | 225:224     | 7.71¢  | [-5,2,2,-1,0,0] | 22, 31, and more  |
+| Porwell comma | (7-limit)   | varies | varies          | 99 (Jim used)     |
+
+The Wikipedia links Jim sent confirm these names:
+  https://en.wikipedia.org/wiki/Kleisma
+  https://en.wikipedia.org/wiki/Schisma
+  http://www.tonalsoft.com/enc/s/semicomma.aspx
+
+### Tonnetz Visualization of Comma Tempering
+
+Jim's Email 2 clarifies how the Tonnetz should display commas:
+"When the tuning tempers out a comma, the path that corresponds to
+the comma should start and stop on cells with the SAME LABEL."
+
+This means:
+- In 53-EDO with the schisma tempered out, following the schisma path
+  on the Tonnetz should end on another cell labeled "0" (or whatever
+  the starting pitch class is)
+- The Tonnetz will have an INFINITE number of cells with each label,
+  arranged in a periodic pattern
+- The periodicity of label repetition IS the visual signature of
+  which comma is tempered out
+- The app must render enough cells to make this repetition visible
+- Different commas produce different repetition patterns
+
+This reinforces the requirement for a large, scrollable Tonnetz.
+
+### Jim's GitHub Repository
+
+Jim's code is at: https://github.com/kukulaj/meantone
+Description: "algorithmic music in a wide variety of tunings"
+Language: likely Java or Python (meantone/ subdirectory)
+This is a reference for understanding his exact algorithms.
+Claude Code should fetch specific files from this repo when
+implementing the annealing or comma computation algorithms,
+to ensure fidelity to Jim's actual approach.
+
+### The Schisma and 53-EDO / 118-EDO
+
+From Jim's "Naturalness" blog post (Jan 2025):
+118-EDO tempers out the schisma, giving intervals even closer to
+just intonation than 53-EDO. A 17-note scale built from a chain of
+perfect fifths fits naturally onto a conventional keyboard with split
+black keys. The schisma temperament is historically significant —
+it underlies some ancient tuning systems. Jim calls it one of his
+most listenable pieces.
+
+Key insight for the app: when the user selects 53-EDO or 118-EDO
+and primes [2,3,5], the schisma should appear prominently in the
+comma list (it's only 1.95 cents). It should ideally be labeled
+"Schisma" by name, not just shown as "32768:32805".
+
+---
+
+## Updates to commaUtils.js
+
+The comma filtering function must be rewritten. Replace:
+  filterCommas(commas, primes, edo) // old: filter by bestEdo == edo
+
+With:
+  isTempered(monzo, edo) // check if comma maps to 0 EDO steps
+  filterByPrimes(commas, primes) // filter by selected prime set
+  filterByEdo(commas, edo) // uses isTempered, not bestEdo match
+  sortByCents(commas) // smallest cents first
+  limitList(commas, maxCount) // keep list to ~6-20 entries
+
+The isTempered function:
+```javascript
+function isTempered(monzo, edo) {
+  const primes = [2, 3, 5, 7, 11, 13];
+  let steps = 0;
+  for (let i = 0; i < monzo.length; i++) {
+    if (monzo[i] !== 0) {
+      steps += monzo[i] * Math.round(edo * Math.log2(primes[i]));
+    }
+  }
+  return steps === 0;
+}
+```
+
+Also add named comma lookup: after filtering, check if each comma
+matches a known named comma (by ratio or monzo) and attach the name.
