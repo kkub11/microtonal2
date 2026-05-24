@@ -18,17 +18,19 @@ const initialState = {
   yInterval: { ratio: [5, 4] },
   // Step 3
   selectedComma: null,
+  scale: null,
   // Steps 4–6 populated as we build them
 }
 
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_STEP':   return { ...state, currentStep: action.payload }
-    case 'SET_EDO':    return { ...state, edo: action.payload }
-    case 'SET_PRIMES':     return { ...state, primes: action.payload }
+    case 'SET_EDO':    return { ...state, edo: action.payload, selectedComma: null, scale: null }
+    case 'SET_PRIMES':     return { ...state, primes: action.payload, selectedComma: null, scale: null }
     case 'SET_X_INTERVAL': return { ...state, xInterval: action.payload }
     case 'SET_Y_INTERVAL':   return { ...state, yInterval: action.payload }
     case 'SET_COMMA':        return { ...state, selectedComma: action.payload }
+    case 'SET_SCALE':        return { ...state, scale: action.payload }
     default:                 return state
   }
 }
@@ -67,7 +69,9 @@ export default function App() {
               xInterval={state.xInterval}
               yInterval={state.yInterval}
               selectedComma={state.selectedComma}
+              scale={state.scale}
               onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
+              onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
             />
           )}
           {state.currentStep === 2 && (

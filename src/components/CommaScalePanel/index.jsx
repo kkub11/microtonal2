@@ -1,8 +1,9 @@
 import CommaList from './CommaList'
 import CommaDetail from './CommaDetail'
+import ScaleBuilder from './ScaleBuilder'
 
 export default function CommaScalePanel({
-  edo, primes, xInterval, yInterval, selectedComma, onCommaChange,
+  edo, primes, xInterval, yInterval, selectedComma, scale, onCommaChange, onScaleChange,
 }) {
   return (
     <div className="space-y-4">
@@ -28,6 +29,19 @@ export default function CommaScalePanel({
             yInterval={yInterval}
           />
         </div>
+      </div>
+
+      <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <ScaleBuilder
+          key={selectedComma?.monzo.join(',') ?? 'none'}
+          comma={selectedComma}
+          edo={edo}
+          primes={primes}
+          xInterval={xInterval}
+          yInterval={yInterval}
+          scale={scale}
+          onScaleChange={onScaleChange}
+        />
       </div>
     </div>
   )
