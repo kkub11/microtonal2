@@ -665,7 +665,15 @@ src/
   App.jsx
   main.jsx
 public/
-  commas_best.txt
+  commas_best.txt         runtime data — loaded by the app at startup
+reference/
+  53edo_commas2.txt       validation reference only — NOT loaded at runtime.
+                          Jim's pre-computed comma list for 53-EDO.
+                          Use this to verify that commaUtils.js filterByEdo()
+                          produces correct results: run the filter on
+                          commas_best.txt for edo=53 and check that the
+                          schisma, kleisma, and other entries from this file
+                          appear in the output. Write a test for this.
 ```
 
 ---
@@ -856,11 +864,20 @@ should be musically interesting (Jim uses it).
 
 ### The 53edo Commas File (`53edo_commas2.txt`)
 
-Jim provided a second comma file: the result of his code computing all
-musically relevant commas specifically for 53-EDO. This is the model
-for how comma lists should be generated per EDO.
+Jim provided this file as the result of his own code computing all
+musically relevant commas for 53-EDO specifically. It is the ground
+truth for validating the app's comma filtering logic.
 
-Format of each line:
+**This file is a VALIDATION REFERENCE, not a runtime data source.**
+The app does NOT load or read this file at runtime. Instead:
+- Place it in the `reference/` folder of the project
+- Use it to write a test for `commaUtils.js`:
+  filter `commas_best.txt` using `isTempered(monzo, 53)` and verify
+  that the schisma, kleisma, and other entries from this file appear
+  in the filtered output. If the test passes, the algorithm is correct.
+- This is the primary correctness check for the comma filtering system.
+
+Format of each line in the file:
   {ratio} = {cents_signed}, {monzo}
 Example:
   32768:32805 = -1.953720787934038, [15 -8 -1 0 0 0 >
