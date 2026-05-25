@@ -78,6 +78,26 @@ export function filterCommas(commas, primes, edo) {
   })
 }
 
+// Returns which primes in the comma are not spanned by the two Tonnetz axes.
+// Used to warn when the displayed path is a 2D projection of a higher-dimensional comma.
+export function getCommaProjectionInfo(monzo, xInterval, yInterval) {
+  const xMonzo = ratioToMonzo(xInterval.ratio[0], xInterval.ratio[1])
+  const yMonzo = ratioToMonzo(yInterval.ratio[0], yInterval.ratio[1])
+
+  const axisSpan = new Set()
+  for (let i = 1; i < xMonzo.length; i++) {
+    if (xMonzo[i] !== 0) axisSpan.add(i)
+    if (yMonzo[i] !== 0) axisSpan.add(i)
+  }
+
+  const extraPrimes = []
+  for (let i = 1; i < monzo.length; i++) {
+    if (monzo[i] !== 0 && !axisSpan.has(i)) extraPrimes.push(PRIMES[i])
+  }
+
+  return { isProjected: extraPrimes.length > 0, extraPrimes }
+}
+
 function ratioToMonzo(num, den) {
   const monzo = new Array(PRIMES.length).fill(0)
   let n = num, d = den

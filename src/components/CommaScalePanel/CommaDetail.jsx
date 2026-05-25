@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { monzoToRatio, monzoToCents, commaToTonnetzPath, getCommaName } from '../../utils/commaUtils'
+import { monzoToRatio, monzoToCents, commaToTonnetzPath, getCommaName, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { getBestApprox } from '../../utils/edoUtils'
 
 const CELL = 36
@@ -19,6 +19,16 @@ function getPathPositions(moves) {
     positions.push([x, y])
   }
   return positions
+}
+
+function ProjectionWarning({ monzo, xInterval, yInterval }) {
+  const { isProjected, extraPrimes } = getCommaProjectionInfo(monzo, xInterval, yInterval)
+  if (!isProjected) return null
+  return (
+    <div className="mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300">
+      <span className="font-semibold">Projected path</span> — this comma involves prime{extraPrimes.length > 1 ? 's' : ''} {extraPrimes.join(', ')} which {extraPrimes.length > 1 ? 'are' : 'is'} not spanned by the current axes. The path shown is a 2D projection and will not close on the grid.
+    </div>
+  )
 }
 
 function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
@@ -192,6 +202,7 @@ export default function CommaDetail({ comma, edo, xInterval, yInterval }) {
         </div>
       </dl>
 
+      <ProjectionWarning monzo={comma.monzo} xInterval={xInterval} yInterval={yInterval} />
       <MiniTonnetz
         monzo={comma.monzo}
         edo={edo}

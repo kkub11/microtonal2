@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { getBestApprox, enumerateJustIntervals } from '../../utils/edoUtils'
-import { commaToTonnetzPath } from '../../utils/commaUtils'
+import { commaToTonnetzPath, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
 
 const CELL = 32
@@ -283,6 +283,15 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
         Click cells to toggle pitch classes into the scale.
         {comma && ' Amber border = comma traversal path.'}
       </p>
+
+      {comma && (() => {
+        const { isProjected, extraPrimes } = getCommaProjectionInfo(comma.monzo, xInterval, yInterval)
+        return isProjected ? (
+          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">Projected path</span> — prime{extraPrimes.length > 1 ? 's' : ''} {extraPrimes.join(', ')} not in axes. The amber path is a 2D projection and will not close.
+          </div>
+        ) : null
+      })()}
 
       <InteractiveTonnetz
         edo={edo} xInterval={xInterval} yInterval={yInterval}
