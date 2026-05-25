@@ -121,9 +121,16 @@ export function commaToTonnetzPath(monzo, xInterval, yInterval) {
   if (!sol) return []
 
   const [a, b] = sol.map(Math.round)
-  const path = []
   const sx = Math.sign(a), sy = Math.sign(b)
-  for (let i = 0; i < Math.abs(a); i++) path.push([sx, 0])
-  for (let i = 0; i < Math.abs(b); i++) path.push([0, sy])
+  const na = Math.abs(a), nb = Math.abs(b)
+  const total = na + nb
+  const path = []
+  let xDone = 0
+  for (let i = 0; i < total; i++) {
+    // Bresenham-style even distribution of x and y steps
+    const xTarget = Math.round((i + 1) * na / total)
+    if (xTarget > xDone) { path.push([sx, 0]); xDone++ }
+    else path.push([0, sy])
+  }
   return path
 }

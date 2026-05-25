@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import {
   parseCommasText,
   monzoToRatio,
@@ -191,5 +193,51 @@ describe('commaToTonnetzPath', () => {
   it('unison comma → empty path', () => {
     const path = commaToTonnetzPath([0, 0, 0, 0, 0, 0], P5, M3)
     expect(path).toHaveLength(0)
+  })
+
+  it('zigzag: steps are interleaved, not L-shaped', () => {
+    // Syntonic comma has 4 x-steps and 1 y-step.
+    // Zigzag should place the y-step somewhere in the middle, not at the end.
+    const path = commaToTonnetzPath([-4, 4, -1, 0, 0, 0], P5, M3)
+    const lastMove = path[path.length - 1]
+    // Original L-shape ended with [0, -1]; zigzag must NOT have all y-steps last
+    const yStepIndex = path.findIndex(([, dy]) => dy !== 0)
+    expect(yStepIndex).toBeGreaterThan(0)     // y-step is not first
+    expect(yStepIndex).toBeLessThan(path.length - 1)  // y-step is not last
+  })
+})
+
+// ─── Integration: validate against reference/53edo_commas2.txt ────────────────
+
+describe('53-EDO comma filtering against reference file', () => {
+  const commasBestPath = resolve(process.cwd(), 'public/commas_best.txt')
+  const allCommas = parseCommasText(readFileSync(commasBestPath, 'utf8'))
+
+  // commas_best.txt uses positive-cents convention, so monzos may differ in sign
+  // from the canonical form. Use getCommaName() which handles both orientations.
+
+  it('schisma is in 53-EDO + [2,3,5] filter', () => {
+    const result = filterCommas(allCommas, [2, 3, 5], 53)
+    expect(result.some(c => getCommaName(c.monzo) === 'Schisma')).toBe(true)
+  })
+
+  it('kleisma is in 53-EDO + [2,3,5] filter', () => {
+    const result = filterCommas(allCommas, [2, 3, 5], 53)
+    expect(result.some(c => getCommaName(c.monzo) === 'Kleisma')).toBe(true)
+  })
+
+  it('marvel comma appears when prime 7 included', () => {
+    const result = filterCommas(allCommas, [2, 3, 5, 7], 53)
+    expect(result.some(c => getCommaName(c.monzo) === 'Marvel comma')).toBe(true)
+  })
+
+  it('syntonic comma is NOT tempered by 53-EDO', () => {
+    const result = filterCommas(allCommas, [2, 3, 5], 53)
+    expect(result.every(c => c.monzo.join(',') !== '-4,4,-1,0,0,0')).toBe(true)
+  })
+
+  it('53-EDO [2,3,5] list has at least 2 commas (schisma + kleisma)', () => {
+    const result = filterCommas(allCommas, [2, 3, 5], 53)
+    expect(result.length).toBeGreaterThanOrEqual(2)
   })
 })

@@ -24,6 +24,48 @@ function getPathCells(moves) {
   return cells
 }
 
+function computeScaleMetrics(scale, edo) {
+  if (!scale || scale.length < 2) return null
+  const stepCents = scale.map((p, i) => {
+    const next = scale[(i + 1) % scale.length]
+    return ((next - p + edo) % edo) / edo * 1200
+  })
+  const min = Math.min(...stepCents)
+  const max = Math.max(...stepCents)
+  return { stepCents, min, max, ratio: max / min }
+}
+
+function ScaleMetrics({ scale, edo }) {
+  const m = computeScaleMetrics(scale, edo)
+  if (!m) return null
+  const ratioFlag = m.ratio > 3
+  const tinyFlag = m.min < 50
+  return (
+    <div className="text-xs space-y-0.5">
+      <div className="flex flex-wrap gap-3">
+        <span className="text-slate-500 dark:text-slate-400">
+          Min: <span className={`font-mono font-semibold ${tinyFlag ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
+            {m.min.toFixed(1)}¢
+          </span>
+          {tinyFlag && ' ⚠ <50¢'}
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">
+          Max: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{m.max.toFixed(1)}¢</span>
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">
+          Ratio: <span className={`font-mono font-semibold ${ratioFlag ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
+            {m.ratio.toFixed(2)}
+          </span>
+          {ratioFlag && ' ⚠ >3:1'}
+        </span>
+      </div>
+      <div className="font-mono text-slate-500 dark:text-slate-400">
+        Steps: {m.stepCents.map(c => c.toFixed(0) + '¢').join('  ')}
+      </div>
+    </div>
+  )
+}
+
 function nonOctavePrimeCount(monzo) {
   let count = 0
   for (let i = 1; i < monzo.length; i++) {
@@ -148,6 +190,7 @@ function AutoMode({ edo, primes, defaultGenerator, onSelect }) {
             {scale.length}-note scale preview
           </p>
           <ScaleRuler scale={scale} edo={edo} />
+          <ScaleMetrics scale={scale} edo={edo} />
           <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
             [{scale.join(', ')}]
           </p>
@@ -252,6 +295,7 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
             {scale.length} pitch class{scale.length !== 1 ? 'es' : ''} selected
           </p>
           <ScaleRuler scale={scale} edo={edo} />
+          <ScaleMetrics scale={scale} edo={edo} />
           <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
             [{scale.join(', ')}]
           </p>

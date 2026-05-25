@@ -4,8 +4,33 @@ const CELL = 44
 const GAP = 3
 const STEP = CELL + GAP
 
-const X_COLOR = '#7c3aed'
-const Y_COLOR = '#0891b2'
+// Standard interval colors matching Jim's blog conventions.
+// Keyed by "p:q" where p > q (ascending form).
+const INTERVAL_COLORS = {
+  '3:2': '#22c55e',   // green  — perfect fifth
+  '4:3': '#22c55e',   // green  — perfect fourth
+  '5:4': '#3b82f6',   // blue   — major third
+  '8:5': '#3b82f6',   // blue   — minor sixth
+  '6:5': '#3b82f6',   // blue   — minor third (5-limit)
+  '5:3': '#3b82f6',   // blue   — major sixth
+  '7:4': '#ef4444',   // red    — harmonic seventh
+  '8:7': '#ef4444',   // red
+  '7:6': '#ef4444',   // red    — septimal minor third
+  '9:7': '#ef4444',   // red
+  '7:5': '#ef4444',   // red    — septimal tritone
+  '11:8': '#f97316',  // orange — undecimal tritone
+  '16:11': '#f97316', // orange
+  '11:6': '#f97316',  // orange
+  '12:11': '#f97316', // orange
+  '13:8': '#a855f7',  // purple — tridecimal major sixth
+  '16:13': '#a855f7', // purple
+  '13:12': '#a855f7', // purple
+  '13:9': '#a855f7',  // purple
+}
+
+function intervalColor(ratio) {
+  return INTERVAL_COLORS[`${ratio[0]}:${ratio[1]}`] || '#6b7280'
+}
 
 function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
@@ -18,6 +43,8 @@ const btnClass = [
 ].join(' ')
 
 export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval }) {
+  const X_COLOR = intervalColor(xInterval.ratio)
+  const Y_COLOR = intervalColor(yInterval.ratio)
   const [scale, setScale] = useState(1)
   const containerRef = useRef(null)
 
