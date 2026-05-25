@@ -505,8 +505,49 @@ Jim's note: below 100 is "already a vast universe."
 - The bigger the EDO, the larger the grid needs to be
 - Cells show EDO pitch class numbers (or note names if mappable)
 - Colored arrows show interval directions (one color per interval type)
+  Standard colors (from Jim's blog): green = fifths, blue = major thirds,
+  red = 7:4 intervals. Extend with more colors for 11, 13, etc.
 - User can click cells to select pitches for manual scale building
 - Comma traversal path is highlighted as a colored trail on the grid
+
+**Comma path must be ZIGZAG, not L-shaped:**
+Jim explicitly said the current L-shaped path display is awkward.
+The correct approach interspersed the two interval types rather than
+doing all of one then all of the other. For example, for a comma
+involving fifths and major thirds, the path should alternate:
+  fifth → third → fifth → third → ...
+not: fifth → fifth → fifth → third → third → third
+
+The zigzag path is also a better visual hint for scale construction,
+since the scale is built by fattening the zigzag path.
+
+**Multi-prime commas and the 2D Tonnetz limitation:**
+A 2D Tonnetz only has two axes. A comma involving three or more
+interval types (e.g. 126:125 involving primes 3, 5, and 7) cannot
+be fully represented on a 2D grid. Options:
+  a) Show the path projected onto the two selected Tonnetz axes,
+     with a warning that the projection is partial
+  b) Allow the user to pick which two of the three+ intervals to
+     display, and show how the path moves along those two axes
+  c) Show a separate "spiral" layout (see below) as an alternative
+Jim recommends 31-EDO with primes [3,5,7] and comma 126:125 as the
+canonical test case for this multi-prime challenge.
+
+**Spiral layout (alternative to grid):**
+From the "Conventionally Unconventional" post: instead of a standard
+rectangular grid, notes can be arranged in a spiral that prioritizes
+chains of major thirds (or whichever interval the user cares about
+most). This is useful for scales built from chains of fifths where
+major third relationships are still important. Consider offering
+both a grid view and a spiral view as toggle options.
+
+**Arrow colors for all interval types:**
+  green  = perfect fifth  (3:2)
+  blue   = major third    (5:4)
+  red    = 7:4 interval
+  orange = 11:8 interval
+  purple = 13:8 interval
+  (extend as needed for higher primes)
 
 ---
 
@@ -634,12 +675,12 @@ public/
 Session 1 (TuningPanel) is DONE. Continue from session 2.
 
 1. ~~TuningPanel~~ DONE
-2. ~~primeUtils.js + update PrimeSelector to support custom prime input~~ DONE
-3. ~~commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
-   filterCommas by primes and edo~~ DONE
-4. ~~TonnetzGrid — scrollable/zoomable canvas, configurable axes,
-   colored interval arrows, repeating pitch class labels~~ DONE
-5. ~~CommaList + CommaDetail — filterable comma selector, path on Tonnetz~~ DONE
+2. primeUtils.js + update PrimeSelector to support custom prime input
+3. commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
+   filterCommas by primes and edo
+4. TonnetzGrid — scrollable/zoomable canvas, configurable axes,
+   colored interval arrows, repeating pitch class labels
+5. CommaList + CommaDetail — filterable comma selector, path on Tonnetz
 6. ScaleBuilder — auto (2-prime circulation) + manual Tonnetz picker
 7. costFunction.js + CostTable display with param sliders
 8. annealing.worker.js — continuous loop, SET_TEMPERATURE / SNAPSHOT /
@@ -727,6 +768,63 @@ Add recursive subdivision only after simple version is verified.
 
 ---
 
+## Algorithm: Scale Building
+
+Jim's scale building process has two phases: path construction and
+fattening. Both are now well understood from his emails and blog posts.
+
+### Phase 1: Construct a Zigzag Comma Path
+
+Starting from pitch class 0, follow the comma's monzo as a path on
+the Tonnetz, but ZIGZAG between interval types rather than doing all
+of one then all of the other.
+
+For a comma with monzo [a, b] (meaning a steps of interval X and b
+steps of interval Y on the Tonnetz axes):
+  - Distribute the steps as evenly as possible, alternating X and Y
+  - Example: [4, -3] → X, Y⁻¹, X, Y⁻¹, X, Y⁻¹, X (4 X-steps, 3 Y-steps)
+  - NOT: X, X, X, X, Y⁻¹, Y⁻¹, Y⁻¹ (the L-shape Jim criticized)
+
+The path must end on a cell with the same label as the start (e.g.
+pitch class 0 → pitch class 0), confirming the comma is tempered out.
+
+For commas involving 3+ interval types, project onto the 2D Tonnetz
+axes chosen by the user, with a warning that the path is a projection.
+
+### Phase 2: Fatten the Path
+
+Starting from the zigzag path, add neighboring cells to the scale:
+1. For each cell in the path, consider its Tonnetz neighbors
+2. Add neighbors that improve the evenness of scale step sizes
+3. Target step size criteria (from Jim's email):
+   - MINIMUM step: ~1/24 octave (~50 cents, a quarter-tone)
+     Steps smaller than this are too small to be useful
+   - MAXIMUM step-size ratio: no more than ~3:1 between the
+     smallest and largest steps in the scale
+   - The syntonic comma (~23 cents, ~1/53 octave) is explicitly
+     TOO SMALL to be a usable scale step — warn the user if it appears
+4. Keep adding neighbors until quality criteria are met or no
+   improvement is possible
+
+### Scale Quality Metrics to Display
+
+Show these in the ScaleBuilder UI so the user can evaluate the scale:
+- List of step sizes in cents
+- Minimum and maximum step size
+- Step size ratio (max/min) — flag if > 3
+- Smallest step in cents — flag if < 50 cents
+- Number of notes in scale
+
+### Test Case: 31-EDO with primes [3,5,7], comma 126:125
+
+Jim recommended this as the canonical test for multi-prime scale
+building. 126:125 = 2¹ × 3² × 7¹ : 5³ = monzo [1, 2, -3, 1, 0, 0].
+It involves three primes (3, 5, 7) so the Tonnetz projection applies.
+The app should handle this case gracefully, and the resulting scale
+should be musically interesting (Jim uses it).
+
+---
+
 ## Key Blog Posts for Reference
 
 - Interactive annealing demo (the UX model to follow):
@@ -747,6 +845,10 @@ Add recursive subdivision only after simple version is verified.
   https://interdependentscience.blogspot.com/2026/01/tamp-it-down.html
 - All parameters described:
   https://interdependentscience.blogspot.com/2026/01/lost-in-space.html
+- 31-EDO 12-note scale (Tonnetz with 7:4 arrows):
+  https://interdependentscience.blogspot.com/2025/11/12-note-scale-in-31edo.html
+- 31-EDO 19-note scale (spiral layout):
+  https://interdependentscience.blogspot.com/2025/11/conventionally-unconventional.html
 
 ---
 
