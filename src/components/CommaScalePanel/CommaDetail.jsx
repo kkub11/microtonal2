@@ -1,24 +1,15 @@
 import { useMemo } from 'react'
-import { monzoToRatio, monzoToCents, commaToTonnetzPath, getCommaName, getCommaProjectionInfo } from '../../utils/commaUtils'
+import { monzoToRatio, monzoToCents, commaToTonnetzPath, commaPathPositions, getCommaName, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { getBestApprox } from '../../utils/edoUtils'
 
 const CELL = 36
 const GAP = 3
 const STEP = CELL + GAP
-const PATH_COLOR = '#f59e0b'  // amber — distinct from both axis colors
+const PATH_COLOR = '#f59e0b'  // amber — regular path steps
+const HOP_COLOR  = '#ef4444'  // red   — hop departure/arrival
 
 function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
-}
-
-function getPathPositions(moves) {
-  const positions = [[0, 0]]
-  let x = 0, y = 0
-  for (const [dx, dy] of moves) {
-    x += dx; y += dy
-    positions.push([x, y])
-  }
-  return positions
 }
 
 function ProjectionWarning({ monzo, xInterval, yInterval }) {
@@ -34,9 +25,12 @@ function ProjectionWarning({ monzo, xInterval, yInterval }) {
 function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
   const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
   const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
-  const moves = commaToTonnetzPath(monzo, xInterval, yInterval)
+  const moves  = useMemo(() => commaToTonnetzPath(monzo, xInterval, yInterval), [monzo, xInterval, yInterval])
 
-  const pathPositions = useMemo(() => getPathPositions(moves), [moves])
+  const positions = useMemo(
+    () => commaPathPositions(moves, xSteps, ySteps, edo),
+    [moves, xSteps, ySteps, edo]
+  )
 
   if (moves.length === 0) {
     return (
@@ -46,42 +40,42 @@ function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
     )
   }
 
-  // Bounding box of path positions (including return-to-origin at end)
-  const allX = pathPositions.map(p => p[0])
-  const allY = pathPositions.map(p => p[1])
-  const minX = Math.min(...allX)
-  const maxX = Math.max(...allX)
-  const minY = Math.min(...allY)
-  const maxY = Math.max(...allY)
+  // Bounding box over all positions (including hop arrivals)
+  const allLx = positions.map(p => p.lx)
+  const allLy = positions.map(p => p.ly)
+  const minX = Math.min(...allLx), maxX = Math.max(...allLx)
+  const minY = Math.min(...allLy), maxY = Math.max(...allLy)
 
-  // Grid with 1-cell margin on each side
   const COLS = maxX - minX + 3
   const ROWS = maxY - minY + 3
-  // SVG column for lattice x: col = x - minX + 1
-  // SVG row for lattice y (flip): row = maxY - y + 1
-  const toSVG = (lx, ly) => ({
-    col: lx - minX + 1,
-    row: maxY - ly + 1,
-  })
 
-  const pathSet = new Map()
-  pathPositions.forEach(([x, y], idx) => {
-    pathSet.set(`${x},${y}`, idx)
+  // pathMap: 'lx,ly' → { idx, moveType }
+  // hopDepMap: 'lx,ly' → { toPC, prime } for departure cells preceding a hop
+  const pathMap   = new Map()
+  const hopDepMap = new Map()
+  positions.forEach((pos, idx) => {
+    const key = `${pos.lx},${pos.ly}`
+    if (!pathMap.has(key)) pathMap.set(key, { idx, moveType: pos.moveType })
+    if (pos.moveType === 'hop') {
+      hopDepMap.set(`${pos.fromLx},${pos.fromLy}`, { toPC: pos.toPC, prime: pos.prime })
+    }
   })
 
   const svgW = COLS * STEP - GAP
   const svgH = ROWS * STEP - GAP
 
-  // Readable path description
-  const rights  = moves.filter(([dx]) => dx > 0).length
-  const lefts   = moves.filter(([dx]) => dx < 0).length
-  const ups     = moves.filter(([, dy]) => dy > 0).length
-  const downs   = moves.filter(([, dy]) => dy < 0).length
+  const axisSteps = moves.filter(m => m.type === 'step')
+  const hopMoves  = moves.filter(m => m.type === 'hop')
+  const rights = axisSteps.filter(m => m.dx > 0).length
+  const lefts  = axisSteps.filter(m => m.dx < 0).length
+  const ups    = axisSteps.filter(m => m.dy > 0).length
+  const downs  = axisSteps.filter(m => m.dy < 0).length
   const parts = []
   if (rights) parts.push(`→ ×${rights}`)
   if (lefts)  parts.push(`← ×${lefts}`)
   if (ups)    parts.push(`↑ ×${ups}`)
   if (downs)  parts.push(`↓ ×${downs}`)
+  if (hopMoves.length) parts.push(`hop ×${hopMoves.length}`)
   const pathDesc = parts.join('  ')
 
   return (
@@ -93,42 +87,69 @@ function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
         <svg width={svgW} height={svgH} style={{ display: 'block' }}>
           {Array.from({ length: ROWS }, (_, row) =>
             Array.from({ length: COLS }, (_, col) => {
-              // Lattice coords
               const lx = col + minX - 1
               const ly = maxY - row + 1
-              const pc = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
-              const pathIdx = pathSet.get(`${lx},${ly}`)
-              const onPath = pathIdx !== undefined
+              const pc      = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
+              const cellKey = `${lx},${ly}`
+              const pathInfo = pathMap.get(cellKey)
+              const hopDep   = hopDepMap.get(cellKey)
+              const onPath   = pathInfo !== undefined
+              const isHopArr = pathInfo?.moveType === 'hop'
               const isOrigin = lx === 0 && ly === 0
-              const isLast = pathIdx === pathPositions.length - 1
-              const x = col * STEP
-              const y = row * STEP
+              const isLast   = pathInfo?.idx === positions.length - 1
+              const x = col * STEP, y = row * STEP
+
+              const borderColor = (hopDep || isHopArr) ? HOP_COLOR
+                                : isOrigin ? '#fff'
+                                : onPath ? PATH_COLOR
+                                : 'none'
+              const dashArray = isHopArr ? '3 2' : undefined
+
               return (
                 <g key={`${col}-${row}`}>
                   <rect
                     x={x} y={y} width={CELL} height={CELL} rx={4}
                     fill={pitchFill(pc, edo)}
-                    stroke={isOrigin ? '#fff' : onPath ? PATH_COLOR : 'none'}
-                    strokeWidth={isOrigin ? 2 : onPath ? 2 : 0}
-                    opacity={onPath || isOrigin ? 1 : 0.35}
+                    stroke={borderColor}
+                    strokeWidth={(hopDep || isHopArr || isOrigin || onPath) ? 2 : 0}
+                    strokeDasharray={dashArray}
+                    opacity={onPath || hopDep || isOrigin ? 1 : 0.35}
                   />
+                  {/* PC number */}
                   <text
-                    x={x + CELL / 2} y={y + CELL / 2 - (onPath && !isOrigin ? 4 : 0) + 5}
-                    textAnchor="middle"
-                    fontSize={11}
+                    x={x + CELL / 2}
+                    y={y + CELL / 2 - (onPath && !isOrigin && !hopDep ? 4 : 0) + 5}
+                    textAnchor="middle" fontSize={11}
                     fontWeight={isOrigin ? 'bold' : 'normal'}
                     fill="white"
                     style={{ pointerEvents: 'none', userSelect: 'none' }}
                   >{pc}</text>
-                  {onPath && !isOrigin && (
+                  {/* Traversal order number (regular path cells only) */}
+                  {onPath && !isOrigin && !hopDep && (
                     <text
                       x={x + CELL / 2} y={y + CELL - 4}
-                      textAnchor="middle"
-                      fontSize={9}
-                      fill={isLast ? '#fef3c7' : PATH_COLOR}
-                      fontWeight="bold"
+                      textAnchor="middle" fontSize={9}
+                      fill={isLast ? '#fef3c7' : PATH_COLOR} fontWeight="bold"
                       style={{ pointerEvents: 'none', userSelect: 'none' }}
-                    >{pathIdx}</text>
+                    >{pathInfo.idx}</text>
+                  )}
+                  {/* Hop departure: show which prime the hop uses */}
+                  {hopDep && (
+                    <text
+                      x={x + CELL - 2} y={y + 9}
+                      textAnchor="end" fontSize={8}
+                      fill={HOP_COLOR} fontWeight="bold"
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >→{hopDep.prime}</text>
+                  )}
+                  {/* Hop arrival marker */}
+                  {isHopArr && (
+                    <text
+                      x={x + 3} y={y + 9}
+                      textAnchor="start" fontSize={8}
+                      fill={HOP_COLOR} fontWeight="bold"
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >↩</text>
                   )}
                 </g>
               )
@@ -138,6 +159,7 @@ function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
       </div>
       <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
         Numbers show traversal order · fading = off-path
+        {hopMoves.length > 0 && ' · red border = hop (discontinuous jump)'}
       </p>
     </div>
   )

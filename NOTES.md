@@ -521,25 +521,50 @@ not: fifth → fifth → fifth → third → third → third
 The zigzag path is also a better visual hint for scale construction,
 since the scale is built by fattening the zigzag path.
 
-**Multi-prime commas and the 2D Tonnetz limitation:**
+**Multi-prime commas and the 2D Tonnetz — chosen approach (option b):**
 A 2D Tonnetz only has two axes. A comma involving three or more
 interval types (e.g. 126:125 involving primes 3, 5, and 7) cannot
-be fully represented on a 2D grid. Options:
-  a) Show the path projected onto the two selected Tonnetz axes,
-     with a warning that the projection is partial
-  b) Allow the user to pick which two of the three+ intervals to
-     display, and show how the path moves along those two axes
-  c) Show a separate "spiral" layout (see below) as an alternative
-Jim recommends 31-EDO with primes [3,5,7] and comma 126:125 as the
-canonical test case for this multi-prime challenge.
+be fully represented on a 2D grid. Jim has chosen option b for now:
+
+  Allow the user to pick which two of the three+ intervals to display.
+  The path is shown on those two axes. Movements along the third (or
+  further) interval appear as HOPS — discontinuous jumps to a distant
+  part of the Tonnetz that are not connected by a visible arrow.
+
+Option c (spiral layout) is deferred — implement only if the app
+grows significantly. Do not implement it now.
+
+**Hop visualization (Jim's exact request):**
+When the comma path requires a move along an interval NOT on the
+current Tonnetz axes, the path cannot draw a continuous line. Instead:
+- Draw the path up to the hop point
+- Show a small graphic at the hop point indicating:
+    a) which interval the hop represents, AND/OR
+    b) the destination pitch class label
+- Resume the path at the destination cell
+- The path still closes (returns to pitch class 0), but with one or
+  more visible discontinuities
+
+Jim described this as "easy enough" and suggested using a similar
+style to the existing graphic overlay on the central 0 cell that
+indicates the axes. A small labeled arrow or symbol at the hop point,
+distinct from the regular interval arrows, is the right approach.
+
+Jim's own diagrams (270-EDO, 16-note scale) illustrate this clearly:
+- The 3,5 plane diagram shows the scale notes in visible clusters with
+  gaps between them — the gaps are where the 7-prime hops occur.
+  "The 3,5 plane really shows the hops I had mentioned!"
+- The 5,7 plane diagram shows the same scale from a different angle,
+  where the 3-prime movements would appear as hops instead.
+Both diagrams are in `reference/` (270edo_scale_16.jpg and
+270edo_scale_16_5_7.jpg) as visual references for implementation.
 
 **Spiral layout (alternative to grid):**
+DEFERRED. Jim confirmed this is too much for the current stage.
 From the "Conventionally Unconventional" post: instead of a standard
 rectangular grid, notes can be arranged in a spiral that prioritizes
-chains of major thirds (or whichever interval the user cares about
-most). This is useful for scales built from chains of fifths where
-major third relationships are still important. Consider offering
-both a grid view and a spiral view as toggle options.
+chains of major thirds. Consider offering this only if the app grows
+into something with many users. Do not implement now.
 
 **Arrow colors for all interval types:**
   green  = perfect fifth  (3:2)
@@ -674,16 +699,23 @@ reference/
                           commas_best.txt for edo=53 and check that the
                           schisma, kleisma, and other entries from this file
                           appear in the output. Write a test for this.
+  270edo_scale_16.jpg     Jim's 270-EDO 16-note scale shown in the 3,5 plane.
+                          Shows hop discontinuities clearly — green cells are
+                          scale notes, gaps between clusters = 7-prime hops.
+                          Reference for implementing hop visualization.
+  270edo_scale_16_5_7.jpg Same scale shown in the 5,7 plane.
+                          Reference for the axis-switching feature of the
+                          Tonnetz (same scale, different two-prime view).
 ```
 
 ---
 
 ## Build Order (one Claude Code session per item)
 
-Session 1 (TuningPanel) is DONE. Continue from session 2.
+Sessions 1–6 are DONE. Continue from session 7.
 
 1. ~~TuningPanel~~ DONE
-2. ~~primeUtils.js + update PrimeSelector to support custom prime input~~ DONE
+2. ~~primeUtils.js + update PrimeSelector~~ DONE
 3. ~~commaUtils.js — parse file, monzoToCents, monzoToRatio (BigInt),
    filterCommas by primes and edo~~ DONE
 4. ~~TonnetzGrid — scrollable/zoomable canvas, configurable axes,
@@ -830,6 +862,28 @@ building. 126:125 = 2¹ × 3² × 7¹ : 5³ = monzo [1, 2, -3, 1, 0, 0].
 It involves three primes (3, 5, 7) so the Tonnetz projection applies.
 The app should handle this case gracefully, and the resulting scale
 should be musically interesting (Jim uses it).
+
+**Concrete traversal example (from Jim's email):**
+The 12-note scale from the "12-note scale in 31edo" blog post supports
+this comma traversal. The traversal path is:
+
+  C# → A → F → C → G → Eb → C#
+
+This is a sequence of 6 pitch classes that returns to the start,
+confirming that 126:125 is tempered out by 31-EDO. The moves are
+descending major thirds (C#→A, A→F, F→C are each 5:4 down) followed
+by a chain back via fifths and minor thirds (C→G→Eb→C#).
+
+This example is useful for:
+- Verifying the comma path visualization closes correctly (ends on C#)
+- Testing zigzag path generation for a 3-prime comma
+- Demonstrating the Tonnetz projection for primes [3,5,7]
+- Providing a known-good scale to test the annealing against
+
+Jim is running his native annealing code on this exact configuration
+(31-EDO, 126:125, 6×6×6 matrix) and will share the resulting score
+file. When received, add it to `reference/` alongside `53edo_commas2.txt`
+as a second validation reference for import/playback testing.
 
 ---
 

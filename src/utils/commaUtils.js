@@ -114,43 +114,111 @@ function solve2x2(m00, m01, m10, m11, r0, r1) {
   return [(m11 * r0 - m01 * r1) / det, (m00 * r1 - m10 * r0) / det]
 }
 
-// Returns a sequence of [dx, dy] unit moves through the Tonnetz that traces the comma.
+// Finds the nearest Tonnetz cell (lx, ly) to (fromLx, fromLy) that has targetPC.
+// Used to resolve hop destinations to a specific grid position.
+function findNearestGridCell(targetPC, fromLx, fromLy, xSteps, ySteps, edo) {
+  const MAX = 40
+  let best = null, bestDist = Infinity
+  for (let dlx = -MAX; dlx <= MAX; dlx++) {
+    for (let dly = -MAX; dly <= MAX; dly++) {
+      if (dlx === 0 && dly === 0) continue
+      const lx = fromLx + dlx, ly = fromLy + dly
+      const pc = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
+      if (pc === targetPC) {
+        const dist = dlx * dlx + dly * dly
+        if (dist < bestDist) { bestDist = dist; best = [lx, ly] }
+      }
+    }
+  }
+  return best ?? [fromLx, fromLy]
+}
+
+// Converts a rich path (from commaToTonnetzPath) into grid positions.
+// Each position: { lx, ly, moveType: 'origin'|'step'|'hop', ...hopInfo }
+// Hop positions also carry: fromLx, fromLy, fromPC, toPC, prime
+export function commaPathPositions(moves, xSteps, ySteps, edo) {
+  const positions = [{ lx: 0, ly: 0, moveType: 'origin' }]
+  let lx = 0, ly = 0
+  for (const move of moves) {
+    if (move.type === 'step') {
+      lx += move.dx; ly += move.dy
+      positions.push({ lx, ly, moveType: 'step' })
+    } else {
+      const hopDelta = move.exponent * Math.round(edo * Math.log2(PRIMES[move.primeIndex]))
+      const currentPC = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
+      const targetPC = ((currentPC + hopDelta) % edo + edo) % edo
+      const fromLx = lx, fromLy = ly
+      const dest = findNearestGridCell(targetPC, fromLx, fromLy, xSteps, ySteps, edo)
+      lx = dest[0]; ly = dest[1]
+      positions.push({
+        lx, ly, moveType: 'hop',
+        fromLx, fromLy, fromPC: currentPC, toPC: targetPC,
+        prime: PRIMES[move.primeIndex],
+      })
+    }
+  }
+  return positions
+}
+
+// Returns a sequence of move objects tracing the comma through the Tonnetz.
+// Each element is either { type: 'step', dx, dy } (one axis step) or
+// { type: 'hop', primeIndex, exponent } (jump along a non-axis prime).
 // xInterval and yInterval are { ratio: [numerator, denominator] }.
 export function commaToTonnetzPath(monzo, xInterval, yInterval) {
   const xMonzo = ratioToMonzo(xInterval.ratio[0], xInterval.ratio[1])
   const yMonzo = ratioToMonzo(yInterval.ratio[0], yInterval.ratio[1])
 
-  // Skip prime 2 (index 0) — octave adjustments are free
+  // Prime indices (non-octave) covered by at least one axis
+  const axisSet = new Set()
+  for (let i = 1; i < xMonzo.length; i++) {
+    if (xMonzo[i] !== 0) axisSet.add(i)
+    if (yMonzo[i] !== 0) axisSet.add(i)
+  }
+
+  // Separate hop primes (not spanned by axes) from axis-covered primes
+  const hops = []
+  const axisMonzo = monzo.slice()
+  for (let i = 1; i < monzo.length; i++) {
+    if (monzo[i] !== 0 && !axisSet.has(i)) {
+      hops.push({ type: 'hop', primeIndex: i, exponent: monzo[i] })
+      axisMonzo[i] = 0
+    }
+  }
+
+  // Solve for axis steps using only the axis-covered components
   const xVec = xMonzo.slice(1)
   const yVec = yMonzo.slice(1)
-  const cVec = monzo.slice(1)
+  const cVec = axisMonzo.slice(1)
 
-  // Find two row indices for the 2×2 system. Prefer rows where one vector
-  // is zero so the system decouples cleanly (common for standard Tonnetz axes).
   let i0 = xVec.findIndex((v, i) => v !== 0 && yVec[i] === 0)
   let i1 = yVec.findIndex((v, i) => v !== 0 && xVec[i] === 0)
 
   if (i0 < 0 || i1 < 0) {
-    // Fallback: pick the first two dimensions where either vec is non-zero
     const candidates = xVec.map((_, i) => i).filter(i => xVec[i] !== 0 || yVec[i] !== 0)
     i0 = candidates[0] ?? 0
     i1 = candidates[1] ?? 1
   }
 
   const sol = solve2x2(xVec[i0], yVec[i0], xVec[i1], yVec[i1], cVec[i0], cVec[i1])
-  if (!sol) return []
+  if (!sol) return hops  // no axis solution — return just the hops (or [] if no hops)
 
   const [a, b] = sol.map(Math.round)
   const sx = Math.sign(a), sy = Math.sign(b)
   const na = Math.abs(a), nb = Math.abs(b)
   const total = na + nb
-  const path = []
+
+  // Generate zigzag axis steps (Bresenham-style)
+  const axisSteps = []
   let xDone = 0
   for (let i = 0; i < total; i++) {
-    // Bresenham-style even distribution of x and y steps
     const xTarget = Math.round((i + 1) * na / total)
-    if (xTarget > xDone) { path.push([sx, 0]); xDone++ }
-    else path.push([0, sy])
+    if (xTarget > xDone) { axisSteps.push({ type: 'step', dx: sx, dy: 0 }); xDone++ }
+    else axisSteps.push({ type: 'step', dx: 0, dy: sy })
   }
-  return path
+
+  if (hops.length === 0) return axisSteps
+
+  // Interleave hops at the midpoint of the axis step sequence
+  const half = Math.floor(axisSteps.length / 2)
+  return [...axisSteps.slice(0, half), ...hops, ...axisSteps.slice(half)]
 }

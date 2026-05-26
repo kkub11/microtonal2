@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { getBestApprox, enumerateJustIntervals } from '../../utils/edoUtils'
-import { commaToTonnetzPath, getCommaProjectionInfo } from '../../utils/commaUtils'
+import { commaToTonnetzPath, commaPathPositions, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
 
 const CELL = 32
@@ -13,15 +13,22 @@ function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
 }
 
-function getPathCells(moves) {
-  const cells = new Set()
-  cells.add('0,0')
-  let x = 0, y = 0
-  for (const [dx, dy] of moves) {
-    x += dx; y += dy
-    cells.add(`${x},${y}`)
-  }
-  return cells
+// Returns { cells, hopDep, hopArr } for path rendering in InteractiveTonnetz.
+// hopDep: Map 'lx,ly' → { toPC, prime }; hopArr: Set 'lx,ly'
+function buildPathData(moves, xSteps, ySteps, edo) {
+  const cells  = new Set()
+  const hopDep = new Map()
+  const hopArr = new Set()
+  if (!moves || moves.length === 0) return { cells, hopDep, hopArr }
+  const positions = commaPathPositions(moves, xSteps, ySteps, edo)
+  positions.forEach(pos => {
+    cells.add(`${pos.lx},${pos.ly}`)
+    if (pos.moveType === 'hop') {
+      hopDep.set(`${pos.fromLx},${pos.fromLy}`, { toPC: pos.toPC, prime: pos.prime })
+      hopArr.add(`${pos.lx},${pos.ly}`)
+    }
+  })
+  return { cells, hopDep, hopArr }
 }
 
 function computeScaleMetrics(scale, edo) {
@@ -212,11 +219,11 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
   const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
   const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
 
-  const pathCells = useMemo(() => {
-    if (!comma) return new Set()
+  const pathData = useMemo(() => {
+    if (!comma) return { cells: new Set(), hopDep: new Map(), hopArr: new Set() }
     const moves = commaToTonnetzPath(comma.monzo, xInterval, yInterval)
-    return getPathCells(moves)
-  }, [comma, xInterval, yInterval])
+    return buildPathData(moves, xSteps, ySteps, edo)
+  }, [comma, xInterval, yInterval, xSteps, ySteps, edo])
 
   const originCol = Math.floor(MAN_COLS / 2)
   const originRow = Math.floor(MAN_ROWS / 2)
@@ -230,19 +237,31 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
           Array.from({ length: MAN_COLS }, (_, col) => {
             const lx = col - originCol
             const ly = originRow - row
-            const pc = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
-            const onPath = pathCells.has(`${lx},${ly}`)
+            const pc       = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
+            const cellKey  = `${lx},${ly}`
+            const onPath   = pathData.cells.has(cellKey)
+            const hopDep   = pathData.hopDep.get(cellKey)
+            const isHopArr = pathData.hopArr.has(cellKey)
             const isSelected = selectedPCs.has(pc)
             const isOrigin = lx === 0 && ly === 0
             const x = col * STEP, y = row * STEP
+
+            const borderColor = isSelected ? '#f59e0b'
+                              : (hopDep || isHopArr) ? '#ef4444'
+                              : onPath ? '#f59e0b'
+                              : isOrigin ? '#fff'
+                              : 'none'
+            const dashArray = isHopArr ? '3 2' : undefined
+
             return (
               <g key={`${col}-${row}`} style={{ cursor: 'pointer' }} onClick={() => onToggle(pc)}>
                 <rect
                   x={x} y={y} width={CELL} height={CELL} rx={3}
                   fill={isSelected ? '#d97706' : pitchFill(pc, edo)}
-                  stroke={isSelected || onPath ? '#f59e0b' : isOrigin ? '#fff' : 'none'}
-                  strokeWidth={isSelected ? 2 : onPath ? 1.5 : isOrigin ? 2 : 0}
-                  opacity={isSelected || onPath || isOrigin ? 1 : 0.4}
+                  stroke={borderColor}
+                  strokeWidth={isSelected ? 2 : (hopDep || isHopArr || onPath) ? 1.5 : isOrigin ? 2 : 0}
+                  strokeDasharray={dashArray}
+                  opacity={isSelected || onPath || hopDep || isOrigin ? 1 : 0.4}
                 />
                 <text
                   x={x + CELL / 2} y={y + CELL / 2 + 4}
@@ -251,6 +270,22 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
                   fill="white"
                   style={{ pointerEvents: 'none', userSelect: 'none' }}
                 >{pc}</text>
+                {hopDep && (
+                  <text
+                    x={x + CELL - 1} y={y + 8}
+                    textAnchor="end" fontSize={7}
+                    fill="#ef4444" fontWeight="bold"
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  >→{hopDep.prime}</text>
+                )}
+                {isHopArr && (
+                  <text
+                    x={x + 2} y={y + 8}
+                    textAnchor="start" fontSize={7}
+                    fill="#ef4444" fontWeight="bold"
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  >↩</text>
+                )}
               </g>
             )
           })

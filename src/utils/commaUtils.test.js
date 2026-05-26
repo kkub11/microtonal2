@@ -9,6 +9,7 @@ import {
   getCommaName,
   filterCommas,
   commaToTonnetzPath,
+  commaPathPositions,
 } from './commaUtils'
 
 describe('parseCommasText', () => {
@@ -176,17 +177,19 @@ describe('commaToTonnetzPath', () => {
   it('syntonic comma = 4 fifths − 1 major third', () => {
     // 81/80 = (3/2)^4 / (5/4)  → path vector (+4 fifths, −1 third)
     const path = commaToTonnetzPath([-4, 4, -1, 0, 0, 0], P5, M3)
-    const dx = path.reduce((s, [x]) => s + x, 0)
-    const dy = path.reduce((s, [, y]) => s + y, 0)
+    const steps = path.filter(m => m.type === 'step')
+    const dx = steps.reduce((s, m) => s + m.dx, 0)
+    const dy = steps.reduce((s, m) => s + m.dy, 0)
     expect(dx).toBe(4)
     expect(dy).toBe(-1)
   })
 
   it('returns unit steps', () => {
     const path = commaToTonnetzPath([-4, 4, -1, 0, 0, 0], P5, M3)
-    expect(path.length).toBe(5)  // |4| + |-1|
-    path.forEach(([x, y]) => {
-      expect(Math.abs(x) + Math.abs(y)).toBe(1)  // exactly one unit step each
+    expect(path.length).toBe(5)  // |4| + |-1|, no hops for 5-limit comma
+    path.forEach(m => {
+      expect(m.type).toBe('step')
+      expect(Math.abs(m.dx) + Math.abs(m.dy)).toBe(1)
     })
   })
 
@@ -199,11 +202,60 @@ describe('commaToTonnetzPath', () => {
     // Syntonic comma has 4 x-steps and 1 y-step.
     // Zigzag should place the y-step somewhere in the middle, not at the end.
     const path = commaToTonnetzPath([-4, 4, -1, 0, 0, 0], P5, M3)
-    const lastMove = path[path.length - 1]
-    // Original L-shape ended with [0, -1]; zigzag must NOT have all y-steps last
-    const yStepIndex = path.findIndex(([, dy]) => dy !== 0)
+    const yStepIndex = path.findIndex(m => m.type === 'step' && m.dy !== 0)
     expect(yStepIndex).toBeGreaterThan(0)     // y-step is not first
     expect(yStepIndex).toBeLessThan(path.length - 1)  // y-step is not last
+  })
+
+  it('multi-prime comma produces hop event for non-axis prime', () => {
+    // 126:125 = [1, 2, -3, 1, 0, 0]: primes 3,5,7 — with 3:2 and 5:4 axes, prime 7 is a hop
+    const path = commaToTonnetzPath([1, 2, -3, 1, 0, 0], P5, M3)
+    const hops = path.filter(m => m.type === 'hop')
+    expect(hops).toHaveLength(1)
+    expect(hops[0].primeIndex).toBe(3)  // index 3 = prime 7
+    expect(hops[0].exponent).toBe(1)
+  })
+
+  it('multi-prime comma: axis steps + hop are all present', () => {
+    const path = commaToTonnetzPath([1, 2, -3, 1, 0, 0], P5, M3)
+    const steps = path.filter(m => m.type === 'step')
+    const hops = path.filter(m => m.type === 'hop')
+    // 2 fifths and -3 major thirds → 5 axis steps; 1 hop for prime 7
+    expect(steps).toHaveLength(5)
+    expect(hops).toHaveLength(1)
+    // hop is interleaved (at midpoint)
+    const hopIdx = path.indexOf(hops[0])
+    expect(hopIdx).toBeGreaterThan(0)
+    expect(hopIdx).toBeLessThan(path.length - 1)
+  })
+})
+
+describe('commaPathPositions', () => {
+  const P5 = { ratio: [3, 2] }
+  const M3 = { ratio: [5, 4] }
+
+  it('pure axis path starts at origin and traces correctly', () => {
+    // 31-EDO: fifth=18 steps, major third=10 steps
+    const path = commaToTonnetzPath([-4, 4, -1, 0, 0, 0], P5, M3)
+    const positions = commaPathPositions(path, 18, 10, 31)
+    expect(positions[0]).toEqual({ lx: 0, ly: 0, moveType: 'origin' })
+    expect(positions).toHaveLength(6)  // origin + 5 steps
+    // Final position: (4 fifths right, 1 third down) = (4, -1)
+    const last = positions[positions.length - 1]
+    expect(last.lx).toBe(4)
+    expect(last.ly).toBe(-1)
+  })
+
+  it('multi-prime comma produces a hop entry', () => {
+    // 31-EDO: fifth=18, major third=10, 7:4=25 steps
+    const path = commaToTonnetzPath([1, 2, -3, 1, 0, 0], P5, M3)
+    const positions = commaPathPositions(path, 18, 10, 31)
+    const hop = positions.find(p => p.moveType === 'hop')
+    expect(hop).toBeDefined()
+    expect(hop.prime).toBe(7)
+    expect(hop.toPC).toBeDefined()
+    // hop destination is a different cell than the departure
+    expect(hop.lx !== hop.fromLx || hop.ly !== hop.fromLy).toBe(true)
   })
 })
 
