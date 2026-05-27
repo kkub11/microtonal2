@@ -559,6 +559,18 @@ Jim's own diagrams (270-EDO, 16-note scale) illustrate this clearly:
 Both diagrams are in `reference/` (270edo_scale_16.jpg and
 270edo_scale_16_5_7.jpg) as visual references for implementation.
 
+**Companion warning banner (complements hop visualization):**
+The hop graphic shows HOW the path moves through unseen dimensions.
+A warning banner explains WHY — it is a separate, complementary feature.
+When a comma involves primes beyond the two selected Tonnetz axes,
+display a banner above the Tonnetz such as:
+  "This comma involves primes 3, 5, and 7. You are viewing the 3,5
+   plane. Movements along the 7:4 interval appear as hops (⤳).
+   Switch to the 5,7 plane to see those movements continuously."
+This helps new users understand the discontinuities rather than being
+confused by them, and reminds them they can switch axes for a
+different view of the same comma path.
+
 **Spiral layout (alternative to grid):**
 DEFERRED. Jim confirmed this is too much for the current stage.
 From the "Conventionally Unconventional" post: instead of a standard

@@ -78,8 +78,11 @@ export function filterCommas(commas, primes, edo) {
   })
 }
 
-// Returns which primes in the comma are not spanned by the two Tonnetz axes.
-// Used to warn when the displayed path is a 2D projection of a higher-dimensional comma.
+// Returns projection info for the comma onto the two Tonnetz axes.
+// - isProjected: true if any comma prime is outside the axis span
+// - extraPrimes: primes in the comma not covered by either axis (the hop primes)
+// - axisPrimes: non-2 primes covered by the axes (defines the "view plane")
+// - commaPrimes: all non-2 primes present in the comma
 export function getCommaProjectionInfo(monzo, xInterval, yInterval) {
   const xMonzo = ratioToMonzo(xInterval.ratio[0], xInterval.ratio[1])
   const yMonzo = ratioToMonzo(yInterval.ratio[0], yInterval.ratio[1])
@@ -91,11 +94,14 @@ export function getCommaProjectionInfo(monzo, xInterval, yInterval) {
   }
 
   const extraPrimes = []
+  const commaPrimes = []
   for (let i = 1; i < monzo.length; i++) {
+    if (monzo[i] !== 0) commaPrimes.push(PRIMES[i])
     if (monzo[i] !== 0 && !axisSpan.has(i)) extraPrimes.push(PRIMES[i])
   }
+  const axisPrimes = [...axisSpan].map(i => PRIMES[i]).sort((a, b) => a - b)
 
-  return { isProjected: extraPrimes.length > 0, extraPrimes }
+  return { isProjected: extraPrimes.length > 0, extraPrimes, axisPrimes, commaPrimes }
 }
 
 function ratioToMonzo(num, den) {

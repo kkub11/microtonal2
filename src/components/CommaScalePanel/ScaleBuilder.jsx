@@ -320,12 +320,37 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
       </p>
 
       {comma && (() => {
-        const { isProjected, extraPrimes } = getCommaProjectionInfo(comma.monzo, xInterval, yInterval)
-        return isProjected ? (
-          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300">
-            <span className="font-semibold">Projected path</span> — prime{extraPrimes.length > 1 ? 's' : ''} {extraPrimes.join(', ')} not in axes. The amber path is a 2D projection and will not close.
+        const { isProjected, extraPrimes, axisPrimes, commaPrimes } = getCommaProjectionInfo(comma.monzo, xInterval, yInterval)
+        if (!isProjected) return null
+        const HOP_INTERVAL = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
+        const planeName = axisPrimes.join(',')
+        const hopIntervals = extraPrimes.map(p => HOP_INTERVAL[p] ?? `${p}:…`).join(', ')
+        const allPrimesStr = commaPrimes.length <= 2 ? commaPrimes.join(' and ')
+          : commaPrimes.slice(0, -1).join(', ') + ', and ' + commaPrimes[commaPrimes.length - 1]
+        const altPlanes = []
+        for (let i = 0; i < commaPrimes.length; i++)
+          for (let j = i + 1; j < commaPrimes.length; j++) {
+            const name = `${commaPrimes[i]},${commaPrimes[j]}`
+            if (name !== planeName) altPlanes.push(name)
+          }
+        return (
+          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
+            <div>
+              This comma involves primes {allPrimesStr}. You are viewing the{' '}
+              <span className="font-semibold">{planeName} plane</span>. Movements along the{' '}
+              {hopIntervals} interval{extraPrimes.length > 1 ? 's' : ''} appear as hops (⤳).
+            </div>
+            {altPlanes.length > 0 && (
+              <div>
+                Switch to the{' '}
+                {altPlanes.map((p, i) => (
+                  <span key={p}>{i > 0 && ' or '}<span className="font-semibold">{p} plane</span></span>
+                ))}{' '}
+                to see those movements continuously.
+              </div>
+            )}
           </div>
-        ) : null
+        )
       })()}
 
       <InteractiveTonnetz

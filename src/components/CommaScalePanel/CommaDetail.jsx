@@ -12,12 +12,49 @@ function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
 }
 
+// Simplest ascending interval name for a hop prime (relative to nearest power of 2).
+const HOP_INTERVAL = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
+
+function joinPrimes(ps) {
+  if (ps.length === 1) return String(ps[0])
+  return ps.slice(0, -1).join(', ') + ', and ' + ps[ps.length - 1]
+}
+
 function ProjectionWarning({ monzo, xInterval, yInterval }) {
-  const { isProjected, extraPrimes } = getCommaProjectionInfo(monzo, xInterval, yInterval)
+  const { isProjected, extraPrimes, axisPrimes, commaPrimes } = getCommaProjectionInfo(monzo, xInterval, yInterval)
   if (!isProjected) return null
+
+  const planeName = axisPrimes.join(',')
+  const hopIntervals = extraPrimes.map(p => HOP_INTERVAL[p] ?? `${p}:…`).join(', ')
+
+  // Suggest alternative two-prime planes from the comma's own primes
+  const altPlanes = []
+  for (let i = 0; i < commaPrimes.length; i++) {
+    for (let j = i + 1; j < commaPrimes.length; j++) {
+      const name = `${commaPrimes[i]},${commaPrimes[j]}`
+      if (name !== planeName) altPlanes.push(name)
+    }
+  }
+
   return (
-    <div className="mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300">
-      <span className="font-semibold">Projected path</span> — this comma involves prime{extraPrimes.length > 1 ? 's' : ''} {extraPrimes.join(', ')} which {extraPrimes.length > 1 ? 'are' : 'is'} not spanned by the current axes. The path shown is a 2D projection and will not close on the grid.
+    <div className="mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
+      <div>
+        This comma involves primes {joinPrimes(commaPrimes)}. You are viewing the{' '}
+        <span className="font-semibold">{planeName} plane</span>. Movements along the{' '}
+        {hopIntervals} interval{extraPrimes.length > 1 ? 's' : ''} appear as hops (⤳).
+      </div>
+      {altPlanes.length > 0 && (
+        <div>
+          Switch to the{' '}
+          {altPlanes.map((p, i) => (
+            <span key={p}>
+              {i > 0 && ' or '}
+              <span className="font-semibold">{p} plane</span>
+            </span>
+          ))}{' '}
+          to see those movements continuously.
+        </div>
+      )}
     </div>
   )
 }
