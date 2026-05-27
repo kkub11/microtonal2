@@ -1,10 +1,12 @@
 import { useReducer, useMemo } from 'react'
 import { computeTuningError } from './utils/edoUtils'
+import { computeCostTable } from './utils/costFunction'
 import Header from './components/Header'
 import WorkflowStepper from './components/WorkflowStepper'
 import TuningPanel from './components/TuningPanel'
 import TonnetzPanel from './components/TonnetzPanel'
 import CommaScalePanel from './components/CommaScalePanel'
+import CostFunctionPanel from './components/CostFunctionPanel'
 
 const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
@@ -19,7 +21,11 @@ const initialState = {
   // Step 3
   selectedComma: null,
   scale: null,
-  // Steps 4–6 populated as we build them
+  // Step 4
+  costParams: { power: 2.0, maxPQ: 20, proximityK: 0.1 },
+  voiceCount: 3,
+  voiceSettings: [],
+  // Steps 5–6 populated as we build them
 }
 
 function reducer(state, action) {
@@ -31,6 +37,8 @@ function reducer(state, action) {
     case 'SET_Y_INTERVAL':   return { ...state, yInterval: action.payload }
     case 'SET_COMMA':        return { ...state, selectedComma: action.payload }
     case 'SET_SCALE':        return { ...state, scale: action.payload }
+    case 'SET_COST_PARAMS':     return { ...state, costParams: action.payload }
+    case 'SET_VOICE_SETTINGS':  return { ...state, voiceSettings: action.payload }
     default:                 return state
   }
 }
@@ -41,6 +49,11 @@ export default function App() {
   const tuningErrors = useMemo(
     () => computeTuningError(state.edo, state.primes),
     [state.edo, state.primes]
+  )
+
+  const costTable = useMemo(
+    () => state.scale ? computeCostTable(state.scale, state.edo, state.primes, state.costParams) : null,
+    [state.scale, state.edo, state.primes, state.costParams]
   )
 
   return (
@@ -73,6 +86,18 @@ export default function App() {
               onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
               onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
               onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+            />
+          )}
+          {state.currentStep === 4 && (
+            <CostFunctionPanel
+              scale={state.scale}
+              edo={state.edo}
+              costTable={costTable}
+              costParams={state.costParams}
+              onCostParamsChange={(p) => dispatch({ type: 'SET_COST_PARAMS', payload: p })}
+              voiceCount={state.voiceCount}
+              voiceSettings={state.voiceSettings}
+              onVoiceSettingsChange={(vs) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: vs })}
             />
           )}
           {state.currentStep === 2 && (
