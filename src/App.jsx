@@ -72,6 +72,7 @@ export default function App() {
               scale={state.scale}
               onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
               onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
+              onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
             />
           )}
           {state.currentStep === 2 && (

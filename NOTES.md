@@ -563,13 +563,35 @@ Both diagrams are in `reference/` (270edo_scale_16.jpg and
 The hop graphic shows HOW the path moves through unseen dimensions.
 A warning banner explains WHY — it is a separate, complementary feature.
 When a comma involves primes beyond the two selected Tonnetz axes,
-display a banner above the Tonnetz such as:
-  "This comma involves primes 3, 5, and 7. You are viewing the 3,5
-   plane. Movements along the 7:4 interval appear as hops (⤳).
-   Switch to the 5,7 plane to see those movements continuously."
-This helps new users understand the discontinuities rather than being
-confused by them, and reminds them they can switch axes for a
-different view of the same comma path.
+display a banner above the Tonnetz with:
+  - Explanatory text: "This comma involves primes 3, 5, and 7. You are
+    viewing the 3,5 plane. Movements along the 7:4 interval appear as
+    hops (⤳)."
+  - One CLICKABLE BUTTON per missing prime, e.g. [View 5,7 plane]
+    Clicking it immediately updates the Tonnetz axes (xInterval and
+    yInterval in App state) to a plane that includes the missing prime
+    paired with one of the currently visible intervals.
+
+**Plane-switch button logic (keep it simple):**
+For each prime P in the comma's monzo that is not represented by either
+current Tonnetz axis:
+  - Offer one button: "View {currentAxis},P plane"
+  - Clicking sets xInterval = current x-axis interval (unchanged)
+    and yInterval = the interval corresponding to prime P
+  - One button per missing prime — not a full plane picker
+
+Example: comma involves [3, 5, 7], currently viewing 3,5 plane:
+  → one button: [View 3,7 plane]
+  Clicking sets yInterval to 7:4, keeps xInterval as 3:2.
+
+**Implementation notes for Claude Code:**
+- xInterval and yInterval live in App state (Step 2 / TonnetzPanel)
+- The warning banner lives in CommaDetail (Step 3 / CommaScalePanel)
+- Thread onXIntervalChange and onYIntervalChange callbacks from App
+  down through CommaScalePanel → CommaDetail
+- The banner computes missing primes by comparing the comma's monzo
+  non-zero entries against the prime ratios of the current axes
+- This is standard prop-threading, not a redesign — keep it focused
 
 **Spiral layout (alternative to grid):**
 DEFERRED. Jim confirmed this is too much for the current stage.

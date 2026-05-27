@@ -295,7 +295,7 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
   )
 }
 
-function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
+function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalChange }) {
   const [selectedPCs, setSelectedPCs] = useState(new Set())
 
   function togglePC(pc) {
@@ -322,31 +322,34 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
       {comma && (() => {
         const { isProjected, extraPrimes, axisPrimes, commaPrimes } = getCommaProjectionInfo(comma.monzo, xInterval, yInterval)
         if (!isProjected) return null
-        const HOP_INTERVAL = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
+        const PRIME_INTERVAL = { 3: [3,2], 5: [5,4], 7: [7,4], 11: [11,8], 13: [13,8] }
+        const HOP_NAME = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
         const planeName = axisPrimes.join(',')
-        const hopIntervals = extraPrimes.map(p => HOP_INTERVAL[p] ?? `${p}:…`).join(', ')
+        const hopIntervals = extraPrimes.map(p => HOP_NAME[p] ?? `${p}:…`).join(', ')
         const allPrimesStr = commaPrimes.length <= 2 ? commaPrimes.join(' and ')
           : commaPrimes.slice(0, -1).join(', ') + ', and ' + commaPrimes[commaPrimes.length - 1]
-        const altPlanes = []
-        for (let i = 0; i < commaPrimes.length; i++)
-          for (let j = i + 1; j < commaPrimes.length; j++) {
-            const name = `${commaPrimes[i]},${commaPrimes[j]}`
-            if (name !== planeName) altPlanes.push(name)
-          }
+        const xPrime = (() => { for (const p of [13,11,7,5,3]) if (xInterval.ratio[0]%p===0||xInterval.ratio[1]%p===0) return p; return null })()
         return (
-          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
+          <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
             <div>
               This comma involves primes {allPrimesStr}. You are viewing the{' '}
               <span className="font-semibold">{planeName} plane</span>. Movements along the{' '}
               {hopIntervals} interval{extraPrimes.length > 1 ? 's' : ''} appear as hops (⤳).
             </div>
-            {altPlanes.length > 0 && (
-              <div>
-                Switch to the{' '}
-                {altPlanes.map((p, i) => (
-                  <span key={p}>{i > 0 && ' or '}<span className="font-semibold">{p} plane</span></span>
-                ))}{' '}
-                to see those movements continuously.
+            {onYIntervalChange && extraPrimes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {extraPrimes.map(p => {
+                  const ratio = PRIME_INTERVAL[p]
+                  if (!ratio) return null
+                  return (
+                    <button key={p}
+                      onClick={() => onYIntervalChange({ ratio })}
+                      className="px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 hover:bg-amber-300 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 font-semibold transition-colors"
+                    >
+                      View {xPrime},{p} plane
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -394,7 +397,7 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval, scale, onScaleChange }) {
+export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval, scale, onScaleChange, onYIntervalChange }) {
   const suggestedMode = !comma || nonOctavePrimeCount(comma.monzo) <= 2 ? 'auto' : 'manual'
   const [mode, setMode] = useState(suggestedMode)
 
@@ -443,7 +446,7 @@ export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval,
         <ManualMode
           key={`manual-${comma?.monzo.join(',') ?? 'none'}-${edo}`}
           edo={edo} xInterval={xInterval} yInterval={yInterval}
-          comma={comma} onSelect={onScaleChange}
+          comma={comma} onSelect={onScaleChange} onYIntervalChange={onYIntervalChange}
         />
       )}
     </div>

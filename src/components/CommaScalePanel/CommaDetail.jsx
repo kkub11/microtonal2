@@ -12,47 +12,54 @@ function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
 }
 
-// Simplest ascending interval name for a hop prime (relative to nearest power of 2).
-const HOP_INTERVAL = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
+// Canonical interval for each prime (for plane-switch buttons).
+const PRIME_INTERVAL = { 3: [3,2], 5: [5,4], 7: [7,4], 11: [11,8], 13: [13,8] }
+const HOP_INTERVAL_NAME = { 3: '3:2', 5: '5:4', 7: '7:4', 11: '11:8', 13: '13:8' }
+
+// Largest non-2 prime factor of an interval ratio (used for button label).
+function intervalMainPrime(interval) {
+  for (const p of [13, 11, 7, 5, 3]) {
+    if (interval.ratio[0] % p === 0 || interval.ratio[1] % p === 0) return p
+  }
+  return null
+}
 
 function joinPrimes(ps) {
   if (ps.length === 1) return String(ps[0])
   return ps.slice(0, -1).join(', ') + ', and ' + ps[ps.length - 1]
 }
 
-function ProjectionWarning({ monzo, xInterval, yInterval }) {
+function ProjectionWarning({ monzo, xInterval, yInterval, onYIntervalChange }) {
   const { isProjected, extraPrimes, axisPrimes, commaPrimes } = getCommaProjectionInfo(monzo, xInterval, yInterval)
   if (!isProjected) return null
 
   const planeName = axisPrimes.join(',')
-  const hopIntervals = extraPrimes.map(p => HOP_INTERVAL[p] ?? `${p}:…`).join(', ')
-
-  // Suggest alternative two-prime planes from the comma's own primes
-  const altPlanes = []
-  for (let i = 0; i < commaPrimes.length; i++) {
-    for (let j = i + 1; j < commaPrimes.length; j++) {
-      const name = `${commaPrimes[i]},${commaPrimes[j]}`
-      if (name !== planeName) altPlanes.push(name)
-    }
-  }
+  const hopIntervals = extraPrimes.map(p => HOP_INTERVAL_NAME[p] ?? `${p}:…`).join(', ')
+  const xPrime = intervalMainPrime(xInterval)
 
   return (
-    <div className="mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-0.5">
+    <div className="mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
       <div>
         This comma involves primes {joinPrimes(commaPrimes)}. You are viewing the{' '}
         <span className="font-semibold">{planeName} plane</span>. Movements along the{' '}
         {hopIntervals} interval{extraPrimes.length > 1 ? 's' : ''} appear as hops (⤳).
       </div>
-      {altPlanes.length > 0 && (
-        <div>
-          Switch to the{' '}
-          {altPlanes.map((p, i) => (
-            <span key={p}>
-              {i > 0 && ' or '}
-              <span className="font-semibold">{p} plane</span>
-            </span>
-          ))}{' '}
-          to see those movements continuously.
+      {onYIntervalChange && extraPrimes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {extraPrimes.map(p => {
+            const ratio = PRIME_INTERVAL[p]
+            if (!ratio) return null
+            const label = `View ${xPrime},${p} plane`
+            return (
+              <button
+                key={p}
+                onClick={() => onYIntervalChange({ ratio })}
+                className="px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 hover:bg-amber-300 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 font-semibold transition-colors"
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -202,7 +209,7 @@ function MiniTonnetz({ monzo, edo, xInterval, yInterval }) {
   )
 }
 
-export default function CommaDetail({ comma, edo, xInterval, yInterval }) {
+export default function CommaDetail({ comma, edo, xInterval, yInterval, onYIntervalChange }) {
   if (!comma) {
     return (
       <div>
@@ -261,7 +268,7 @@ export default function CommaDetail({ comma, edo, xInterval, yInterval }) {
         </div>
       </dl>
 
-      <ProjectionWarning monzo={comma.monzo} xInterval={xInterval} yInterval={yInterval} />
+      <ProjectionWarning monzo={comma.monzo} xInterval={xInterval} yInterval={yInterval} onYIntervalChange={onYIntervalChange} />
       <MiniTonnetz
         monzo={comma.monzo}
         edo={edo}
