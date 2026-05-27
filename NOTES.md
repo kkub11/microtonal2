@@ -157,7 +157,11 @@ Confirmed from Jim's actual file `99edo_porwell_8x8x8.txt`:
 **Note lines (i-statements):**
   i{instrument} {startSec} {durationSec} {freqRatio} {loudness}
 
-  instrument: i3, i4, i5 = voices 1, 2, 3 (i-number = instrument index)
+  instrument: i3, i4, i5 = voices 1, 2, 3 in the 99-EDO piece.
+              BUT: the 270-EDO piece uses i3, i5, i6 — NOT consecutive.
+              Do NOT assume voice instrument numbers are consecutive or
+              start at i3. Parse whatever i-numbers appear in the file
+              and assign them to voices in the order they first appear.
   startSec:   absolute start time in seconds
   durationSec: note duration in seconds
   freqRatio:  frequency as a RATIO multiplied by reference pitch in
@@ -353,11 +357,50 @@ mode. The user drags the slider from high (chaotic/random) to low
 (ordered/tonal) and listens for the phase transition sweet spot.
 Optional: an "auto-cool" mode that slowly reduces T for unattended runs.
 
+**The two-phase workflow (Jim's recommended approach for comma traversal):**
+When the user wants to preserve a seeded comma traversal, the simple
+single-run approach often fails — the traversal gets erased by the
+randomization before the phase transition occurs. Jim's solution is
+a two-phase process the app should explicitly support as a named mode:
+
+  Phase 1 — Find the transition temperature:
+    Initialize randomly (NOT with the traversal seed).
+    Cool slowly from high temperature, watching the energy graph.
+    When the sharp "knuckle" drop appears in the cost curve,
+    note that temperature. Take a snapshot. This is T_transition.
+
+  Phase 2 — Run at T_transition with seeded initialization:
+    Reset the score array, this time initialized with the comma traversal.
+    Run the annealing at exactly T_transition (fixed, not cooling).
+    The system will reorganize around the transition, preserving the
+    traversal structure while adding fractal fluctuations.
+    The traversal may reorient itself — this is expected and musical.
+
+The app should offer a "Two-Phase Mode" button in the CompositionPanel
+that guides the user through these two phases, automatically recording
+T_transition from Phase 1 and pre-filling it for Phase 2.
+
+**The energy graph (cost vs temperature) — what to look for:**
+The log plot from Jim's 270-EDO piece (reference/270edo_scale_16_log.jpg)
+shows the canonical shape. Key features:
+- x-axis: temperature (high on the right, low on the left as cooling)
+- y-axis: total system cost
+- The curve is smooth above the transition (gradual increase with temp)
+- The "knuckle": a sharp rapid drop at the transition temperature
+  (visible around T=150-200 in the 270-EDO piece)
+- Below the transition: jagged fluctuations — the fractal regime
+- The snapshot temperature (T=123.66) was captured right at the knuckle
+
+The EnergyGraph component must plot cost (y) vs temperature (x) in
+real time as the annealing runs. The knuckle should be visually obvious.
+The user clicks on the knuckle to take a snapshot at that temperature.
+Note: the curve reads right→left as the system cools. Consider displaying
+temperature on a log scale for clarity (the knuckle is easier to see).
+
 **System size:**
 Start with small systems: 6×6×6 = 216 measures is a good default.
-Small systems run fast enough for real-time interactive use in a
-browser Web Worker. Larger systems (up to 16×16 or 4×4×4×4) can be
-offered but with a warning that they run slower.
+7×7×7 = 343 measures is Jim's size for the 270-EDO piece (confirmed).
+Larger systems can be offered but with a warning that they run slower.
 
 **Neighbor topology (WRAPS):**
 Each note event at [v][i1][i2]...[in] has neighbors:
@@ -367,8 +410,12 @@ Total ~5–7 neighbors per note event.
 Wrapping creates the toroidal topology essential for phase transitions.
 
 **Initialization:**
-  Random: fully random pitch assignments
-  Seeded: initialize with a comma traversal pattern
+  Random: fully random pitch assignments (use for Phase 1)
+  Seeded: initialize with a comma traversal pattern (use for Phase 2)
+  The comma traversal seed repeats the traversal path across the full
+  score array, cycling through the traversal as many times as needed
+  to fill all measures. For 7×7×7=343 measures traversing a 7-step
+  comma: 49 repetitions of the 7-step traversal path.
 
 ---
 
@@ -740,6 +787,23 @@ reference/
   270edo_scale_16_5_7.jpg Same scale shown in the 5,7 plane.
                           Reference for the axis-switching feature of the
                           Tonnetz (same scale, different two-prime view).
+  270edo_scale_16_emergent.txt  Jim's actual score file for the 270-EDO piece.
+                          Second validated CSound score file (after the 99-EDO
+                          piece). Key confirmed facts:
+                            - 270-EDO, all freqRatios map to exact integer steps
+                            - 3 voices: i3 (1454 notes), i5 (2351), i6 (3003)
+                            - Note: voice instrument numbers are NOT always
+                              consecutive (i3, i5, i6, not i3, i4, i5)
+                            - 7×7×7 = 343 measures, ~7 sec each, 40 min total
+                            - 52 unique durations (richer than 99-EDO's 18)
+                            - Comma: 2401:2400, scale: 16 notes
+                            - Snapshot temp: 123.66 (right at the knuckle)
+                          Use for import/playback testing and to verify
+                          the app handles non-consecutive voice numbering.
+  270edo_scale_16_log.jpg Jim's annealing energy plot for this piece.
+                          x=temperature (high right, low left), y=cost.
+                          Shows the canonical "knuckle" phase transition
+                          around T=150-200. Reference for EnergyGraph UI.
 ```
 
 ---
@@ -945,6 +1009,8 @@ as a second validation reference for import/playback testing.
   https://interdependentscience.blogspot.com/2025/11/12-note-scale-in-31edo.html
 - 31-EDO 19-note scale (spiral layout):
   https://interdependentscience.blogspot.com/2025/11/conventionally-unconventional.html
+- 270-EDO comma traversal, two-phase annealing, emergent traversal reorientation:
+  https://interdependentscience.blogspot.com/2026/05/emergent-structure.html
 
 ---
 
@@ -1027,9 +1093,10 @@ by name. Known named commas to include:
 |---------------|-------------|--------|-----------------|-------------------|
 | Schisma       | 32805:32768 | 1.95¢  | [-15,8,1,0,0,0] | 53, 118, and more |
 | Kleisma       | 15625:15552 | 8.11¢  | [-6,-5,6,0,0,0] | 53, 72, and more  |
-| Syntonic comma| 81:80       | 21.51¢ | [-4,4,-1,0,0,0] | 12, 19, 31...     |
-| Marvel comma  | 225:224     | 7.71¢  | [-5,2,2,-1,0,0] | 22, 31, and more  |
-| Porwell comma | (7-limit)   | varies | varies          | 99 (Jim used)     |
+| Syntonic comma| 81:80       | 21.51¢ | [-4,4,-1,0,0,0]  | 12, 19, 31...     |
+| Marvel comma  | 225:224     | 7.71¢  | [-5,2,2,-1,0,0]  | 22, 31, and more  |
+| Porwell comma | (7-limit)   | varies | varies           | 99 (Jim used)     |
+| Breedsma      | 2401:2400   | 0.72¢  | [-5,-1,2,4,0,0]  | 270 (Jim used)    |
 
 The Wikipedia links Jim sent confirm these names:
   https://en.wikipedia.org/wiki/Kleisma
