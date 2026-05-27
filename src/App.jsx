@@ -7,6 +7,7 @@ import TuningPanel from './components/TuningPanel'
 import TonnetzPanel from './components/TonnetzPanel'
 import CommaScalePanel from './components/CommaScalePanel'
 import CostFunctionPanel from './components/CostFunctionPanel'
+import CompositionPanel from './components/CompositionPanel'
 
 const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
@@ -25,7 +26,12 @@ const initialState = {
   costParams: { power: 2.0, maxPQ: 20, proximityK: 0.1 },
   voiceCount: 3,
   voiceSettings: [],
-  // Steps 5–6 populated as we build them
+  // Step 5
+  cubeDims: [6, 6, 6],
+  weights: { rangeWeight: 1.0, jumpWeight: 0.0, thematicWeight: 0.0 },
+  rhythmSettings: { measureSec: 5.0, divisor: 4 },
+  snapshots: [],
+  // Step 6 populated as we build it
 }
 
 function reducer(state, action) {
@@ -39,6 +45,11 @@ function reducer(state, action) {
     case 'SET_SCALE':        return { ...state, scale: action.payload }
     case 'SET_COST_PARAMS':     return { ...state, costParams: action.payload }
     case 'SET_VOICE_SETTINGS':  return { ...state, voiceSettings: action.payload }
+    case 'SET_VOICE_COUNT':    return { ...state, voiceCount: action.payload }
+    case 'SET_CUBE_DIMS':      return { ...state, cubeDims: action.payload }
+    case 'SET_WEIGHTS':        return { ...state, weights: action.payload }
+    case 'SET_RHYTHM_SETTINGS': return { ...state, rhythmSettings: action.payload }
+    case 'ADD_SNAPSHOT':       return { ...state, snapshots: [...state.snapshots, action.payload] }
     default:                 return state
   }
 }
@@ -86,6 +97,24 @@ export default function App() {
               onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
               onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
               onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+            />
+          )}
+          {state.currentStep === 5 && (
+            <CompositionPanel
+              scale={state.scale}
+              edo={state.edo}
+              costTable={costTable}
+              voiceCount={state.voiceCount}
+              onVoiceCountChange={(n) => dispatch({ type: 'SET_VOICE_COUNT', payload: n })}
+              voiceSettings={state.voiceSettings}
+              cubeDims={state.cubeDims}
+              onCubeDimsChange={(d) => dispatch({ type: 'SET_CUBE_DIMS', payload: d })}
+              weights={state.weights}
+              onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
+              rhythmSettings={state.rhythmSettings}
+              onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
+              snapshots={state.snapshots}
+              onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
             />
           )}
           {state.currentStep === 4 && (

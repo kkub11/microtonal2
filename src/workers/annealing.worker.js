@@ -31,6 +31,9 @@ self.onmessage = ({ data }) => {
     case 'RESET':
       if (s) reset(data.initMode, data.seed)
       break
+    case 'SET_WEIGHTS':
+      if (s) s.weights = data.value
+      break
   }
 }
 
