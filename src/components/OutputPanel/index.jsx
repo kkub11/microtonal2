@@ -17,6 +17,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   const [waveform,      setWaveform]      = useState('sine')
   const [tempoScale,    setTempoScale]    = useState(1.0)
   const [isPlaying,     setIsPlaying]     = useState(false)
+  const [masterGain,    setMasterGain]    = useState(0.7)
   const [importedEvents, setImportedEvents] = useState(null)
 
   const clampedIdx     = Math.min(selectedIdx, Math.max(0, snapshots.length - 1))
@@ -51,12 +52,12 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   }
 
   function handlePlay() {
-    const engine   = getEngine()
-    const isF      = waveform.startsWith('f')
+    const engine = getEngine()
+    const isF    = waveform.startsWith('f')
     engine.start(noteEvents, {
       waveform:  isF ? 'sine' : waveform,
       harmonics: isF ? F_TABLES[waveform] : null,
-      masterGain: 0.5,
+      masterGain,
     })
     setIsPlaying(true)
   }
@@ -64,6 +65,11 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   function handleStop() {
     engineRef.current?.stop()
     setIsPlaying(false)
+  }
+
+  function handleMasterGainChange(value) {
+    setMasterGain(value)
+    engineRef.current?.setMasterGain(value)
   }
 
   function handleImport(text) {
@@ -120,6 +126,8 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
           onStop={handleStop}
           tempoScale={tempoScale}
           onTempoChange={setTempoScale}
+          masterGain={masterGain}
+          onMasterGainChange={handleMasterGainChange}
         />
         <WaveformSelector value={waveform} onChange={setWaveform} />
       </div>

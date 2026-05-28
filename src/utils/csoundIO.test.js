@@ -120,9 +120,9 @@ describe('importCSound', () => {
     expect(noteEvents[2].freqHz).toBeCloseTo(3.0 * 72)
   })
 
-  test('gainValue in [0.1, 0.8] for Jim-range loudness', () => {
+  test('gainValue in [0.3, 0.8] for Jim-range loudness', () => {
     importCSound(SAMPLE_FILE).noteEvents.forEach(e => {
-      expect(e.gainValue).toBeGreaterThanOrEqual(0.09)
+      expect(e.gainValue).toBeGreaterThanOrEqual(0.29)
       expect(e.gainValue).toBeLessThanOrEqual(0.81)
     })
   })

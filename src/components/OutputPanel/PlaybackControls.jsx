@@ -1,4 +1,8 @@
-export default function PlaybackControls({ isPlaying, onPlay, onStop, tempoScale, onTempoChange }) {
+export default function PlaybackControls({
+  isPlaying, onPlay, onStop,
+  tempoScale, onTempoChange,
+  masterGain, onMasterGainChange,
+}) {
   return (
     <div className="flex items-center gap-4 flex-wrap">
       <button
@@ -8,6 +12,19 @@ export default function PlaybackControls({ isPlaying, onPlay, onStop, tempoScale
       >
         {isPlaying ? 'Stop' : 'Play'}
       </button>
+      <label className="text-sm flex items-center gap-2">
+        Volume
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.02"
+          value={masterGain}
+          onChange={e => onMasterGainChange(Number(e.target.value))}
+          className="w-28"
+        />
+        <span className="text-slate-500 tabular-nums w-10">{Math.round(masterGain * 100)}%</span>
+      </label>
       <label className="text-sm flex items-center gap-2">
         Tempo
         <input

@@ -1,8 +1,8 @@
 const DEFAULT_BASE_HZ = 72
 const LOUDNESS_MIN = 900
 const LOUDNESS_RANGE = 500
-const GAIN_MIN = 0.1
-const GAIN_RANGE = 0.7
+const GAIN_MIN = 0.3
+const GAIN_RANGE = 0.5
 
 function gainToLoudness(gain) {
   return ((gain - GAIN_MIN) / GAIN_RANGE) * LOUDNESS_RANGE + LOUDNESS_MIN
