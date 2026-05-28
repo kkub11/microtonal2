@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
 import { AudioEngine as AudioEngineClass, buildNoteEvents, F_TABLES } from '../../utils/audioEngine'
-import { generateSimpleRhythm } from '../../utils/rhythmUtils'
+import { generateSimpleRhythm, generateFullRhythm } from '../../utils/rhythmUtils'
 import { importCSound } from '../../utils/csoundIO'
 import SnapshotSelector from './SnapshotSelector'
 import FoldedScore from './FoldedScore'
@@ -23,6 +23,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   const [isPlaying,      setIsPlaying]      = useState(false)
   const [masterGain,     setMasterGain]     = useState(0.7)
   const [playbackPos,    setPlaybackPos]    = useState(0)
+  const [rhythmMode,     setRhythmMode]     = useState('full')
   const [importedEvents, setImportedEvents] = useState(null)
 
   const clampedIdx       = Math.min(selectedIdx, Math.max(0, snapshots.length - 1))
@@ -37,10 +38,12 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
     const numMeasures    = scoreShape.slice(1).reduce((a, b) => a * b, 1)
     const numVoices      = scoreShape[0]
     const rhythmPerVoice = Array.from({ length: numVoices }, () =>
-      generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor)
+      rhythmMode === 'full'
+        ? generateFullRhythm(numMeasures, rhythmSettings.measureSec)
+        : generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor)
     )
     return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, BASE_HZ)
-  }, [importedEvents, selectedSnapshot, rhythmSettings])
+  }, [importedEvents, selectedSnapshot, rhythmSettings, rhythmMode])
 
   // Apply tempo scaling — higher tempoScale → shorter durations → faster playback
   const noteEvents = useMemo(() => {
@@ -75,6 +78,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
       const pos   = engineRef.current?.playbackPosition ?? 0
       const total = totalDurationRef.current
       setPlaybackPos(pos)
+      engineRef.current?.scheduleAhead()   // keep rolling lookahead window filled
       if (total > 0 && pos >= total) {
         setIsPlaying(false)
         setPlaybackPos(0)
@@ -133,6 +137,9 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
     setImportedEvents(events)
     handleStop()
   }
+
+  // Rhythm mode generates a new random schedule — stop so the user replays from scratch
+  useEffect(() => { handleStop() }, [rhythmMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restart from current position whenever waveform changes mid-play
   useEffect(() => {
@@ -221,6 +228,24 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
           onTestTone={() => getEngine().testTone()}
         />
         <WaveformSelector value={waveform} onChange={setWaveform} />
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500 dark:text-slate-400">Rhythm</span>
+          <div className="flex rounded overflow-hidden border border-slate-300 dark:border-slate-600">
+            {['simple', 'full'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => setRhythmMode(mode)}
+                className={`px-2.5 py-1 capitalize transition-colors ${
+                  rhythmMode === mode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Empty state */}

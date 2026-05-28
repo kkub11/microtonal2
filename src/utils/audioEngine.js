@@ -76,29 +76,39 @@ export function buildNoteEvents(
   return noteEvents
 }
 
-const ATTACK_SEC  = 0.005
-const RELEASE_SEC = 0.020
+const ATTACK_SEC        = 0.005
+const RELEASE_SEC       = 0.020
+const SCHEDULE_AHEAD_SEC = 10   // rolling lookahead window in seconds
 
 /**
  * Web Audio API manager.
  *
  * AudioContext is created lazily on the first call to start(), satisfying
  * the browser requirement that AudioContext only be created after a user gesture.
+ * Uses a rolling lookahead scheduler: only schedules the next SCHEDULE_AHEAD_SEC
+ * worth of notes at a time. Call scheduleAhead() from a rAF loop to keep the
+ * window filled as playback advances.
  *
  * Usage:
  *   const engine = new AudioEngine()
  *   engine.start(noteEvents, { waveform: 'sine', masterGain: 0.5 })
+ *   engine.scheduleAhead()   // call each rAF tick
  *   engine.stop()
  *   engine.destroy()   // on component unmount
  */
 export class AudioEngine {
   constructor() {
-    this._ctx           = null
-    this._masterGain    = null
-    this._voiceGains    = []
-    this._sources       = []
-    this._startTime     = null  // ctx.currentTime at which score position 0 plays
-    this._totalDuration = 0
+    this._ctx             = null
+    this._masterGain      = null
+    this._voiceGains      = []
+    this._sources         = []
+    this._startTime       = null  // ctx.currentTime at which score position 0 plays
+    this._totalDuration   = 0
+    // Lookahead scheduler state
+    this._allEvents       = []    // sorted by startSec, set by start()
+    this._schedIdx        = 0    // index of next event not yet scheduled
+    this._cachedWaveform  = 'sine'
+    this._cachedWave      = null  // PeriodicWave or null
   }
 
   _ensureContext() {
@@ -120,8 +130,8 @@ export class AudioEngine {
   }
 
   /**
-   * Schedule all note events for playback starting `startOffset` seconds from now.
-   * Stops any previous playback first.
+   * Begin playback. Schedules the first SCHEDULE_AHEAD_SEC seconds immediately;
+   * call scheduleAhead() each rAF tick to keep the window filled.
    *
    * @param {object[]} noteEvents     Output of buildNoteEvents or importCSound
    * @param {object}   [options]
@@ -146,7 +156,6 @@ export class AudioEngine {
     } = options
 
     this._masterGain.gain.value = masterGain
-
     this._totalDuration = noteEvents.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
 
     const numVoices = noteEvents.reduce((m, e) => Math.max(m, e.voice + 1), 0)
@@ -157,28 +166,55 @@ export class AudioEngine {
       return g
     })
 
-    const periodicWave = harmonics ? this._periodicWave(harmonics) : null
-    // _startTime is the ctx clock value at which score position 0 would start
+    this._cachedWaveform = waveform
+    this._cachedWave     = harmonics ? this._periodicWave(harmonics) : null
+
+    // Sort events by start time and skip past the seek position
+    this._allEvents = [...noteEvents].sort((a, b) => a.startSec - b.startSec)
+    this._schedIdx  = 0
+    while (
+      this._schedIdx < this._allEvents.length &&
+      this._allEvents[this._schedIdx].startSec + this._allEvents[this._schedIdx].durationSec <= seekFrom
+    ) {
+      this._schedIdx++
+    }
+
+    // _startTime: ctx clock value at which score position 0 would play
     this._startTime = ctx.currentTime + startOffset - seekFrom
-    const now = this._startTime
 
-    for (const e of noteEvents) {
-      if (e.isRest || e.durationSec <= 0 || e.freqHz <= 0) continue
-      // skip notes that ended before the seek position
-      if (e.startSec + e.durationSec <= seekFrom) continue
+    this.scheduleAhead(SCHEDULE_AHEAD_SEC)
+  }
 
-      const t0 = now + e.startSec
+  /**
+   * Schedule events whose startSec falls within the next lookaheadSec seconds.
+   * Call this each rAF tick to keep the rolling window filled.
+   */
+  scheduleAhead(lookaheadSec = SCHEDULE_AHEAD_SEC) {
+    if (!this._ctx || this._startTime === null) return
+    const ctx          = this._ctx
+    const scoreHorizon = ctx.currentTime + lookaheadSec - this._startTime
+
+    while (this._schedIdx < this._allEvents.length) {
+      const e = this._allEvents[this._schedIdx]
+      if (e.startSec > scoreHorizon) break
+      this._schedIdx++
+
+      if (e.isRest || !(e.freqHz > 0) || e.durationSec <= 0) continue
+
+      const t0 = this._startTime + e.startSec
       const t1 = t0 + e.durationSec
+      if (t1 <= ctx.currentTime) continue  // note already ended
+
       const tA = Math.min(t0 + ATTACK_SEC, t1)
       const tR = Math.max(t1 - RELEASE_SEC, tA)
 
       const osc = ctx.createOscillator()
       const env = ctx.createGain()
 
-      if (periodicWave) {
-        osc.setPeriodicWave(periodicWave)
+      if (this._cachedWave) {
+        osc.setPeriodicWave(this._cachedWave)
       } else {
-        osc.type = waveform
+        osc.type = this._cachedWaveform
       }
       osc.frequency.value = e.freqHz
 
@@ -192,18 +228,27 @@ export class AudioEngine {
       osc.start(t0)
       osc.stop(t1)
 
+      osc.onended = () => {
+        const idx = this._sources.indexOf(osc)
+        if (idx >= 0) this._sources.splice(idx, 1)
+      }
       this._sources.push(osc)
     }
   }
 
   stop() {
-    for (const s of this._sources) {
+    // Null callbacks before stopping to prevent stale onended splices into new _sources
+    const sources = this._sources
+    this._sources = []
+    for (const s of sources) {
+      s.onended = null
       try { s.stop(0) } catch (_) {}
     }
-    this._sources    = []
     for (const g of this._voiceGains) g.disconnect()
-    this._voiceGains = []
-    this._startTime  = null
+    this._voiceGains  = []
+    this._startTime   = null
+    this._allEvents   = []
+    this._schedIdx    = 0
   }
 
   setMasterGain(value) {
