@@ -93,10 +93,12 @@ const RELEASE_SEC = 0.020
  */
 export class AudioEngine {
   constructor() {
-    this._ctx        = null
-    this._masterGain = null
-    this._voiceGains = []
-    this._sources    = []
+    this._ctx           = null
+    this._masterGain    = null
+    this._voiceGains    = []
+    this._sources       = []
+    this._startTime     = null  // ctx.currentTime at which score position 0 plays
+    this._totalDuration = 0
   }
 
   _ensureContext() {
@@ -128,6 +130,7 @@ export class AudioEngine {
    * @param {number[]} [options.voiceGains=[]]      Per-voice gain multipliers (0–1)
    * @param {number}   [options.masterGain=0.5]     Master output gain
    * @param {number}   [options.startOffset=0]      Seconds from now to begin
+   * @param {number}   [options.seekFrom=0]         Score position (seconds) to seek to
    */
   start(noteEvents, options = {}) {
     const ctx = this._ensureContext()
@@ -139,9 +142,12 @@ export class AudioEngine {
       voiceGains  = [],
       masterGain  = 0.5,
       startOffset = 0,
+      seekFrom    = 0,
     } = options
 
     this._masterGain.gain.value = masterGain
+
+    this._totalDuration = noteEvents.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
 
     const numVoices = noteEvents.reduce((m, e) => Math.max(m, e.voice + 1), 0)
     this._voiceGains = Array.from({ length: numVoices }, (_, v) => {
@@ -152,10 +158,14 @@ export class AudioEngine {
     })
 
     const periodicWave = harmonics ? this._periodicWave(harmonics) : null
-    const now = ctx.currentTime + startOffset
+    // _startTime is the ctx clock value at which score position 0 would start
+    this._startTime = ctx.currentTime + startOffset - seekFrom
+    const now = this._startTime
 
     for (const e of noteEvents) {
       if (e.isRest || e.durationSec <= 0 || e.freqHz <= 0) continue
+      // skip notes that ended before the seek position
+      if (e.startSec + e.durationSec <= seekFrom) continue
 
       const t0 = now + e.startSec
       const t1 = t0 + e.durationSec
@@ -193,6 +203,7 @@ export class AudioEngine {
     this._sources    = []
     for (const g of this._voiceGains) g.disconnect()
     this._voiceGains = []
+    this._startTime  = null
   }
 
   setMasterGain(value) {
@@ -201,6 +212,16 @@ export class AudioEngine {
 
   setVoiceGain(voice, value) {
     if (this._voiceGains[voice]) this._voiceGains[voice].gain.value = value
+  }
+
+  // Current score position in seconds (distance from _startTime)
+  get playbackPosition() {
+    if (this._startTime === null || !this._ctx) return 0
+    return Math.max(0, this._ctx.currentTime - this._startTime)
+  }
+
+  get totalDuration() {
+    return this._totalDuration
   }
 
   get currentTime() {

@@ -1,6 +1,6 @@
 const VOICE_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899']
 
-export default function FoldedScore({ noteEvents, baseHz = 72 }) {
+export default function FoldedScore({ noteEvents, baseHz = 72, playheadSec = null }) {
   const nonRests = noteEvents.filter(e => !e.isRest && e.freqHz > 0 && e.durationSec > 0)
 
   if (nonRests.length === 0) {
@@ -15,6 +15,10 @@ export default function FoldedScore({ noteEvents, baseHz = 72 }) {
   const W = 800, H = 160
   const totalDur = nonRests.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
   const xScale = W / totalDur
+
+  const playheadX = (playheadSec != null && totalDur > 0)
+    ? Math.min((playheadSec / totalDur) * W, W)
+    : null
 
   return (
     <svg
@@ -35,6 +39,14 @@ export default function FoldedScore({ noteEvents, baseHz = 72 }) {
           <rect key={i} x={x} y={y - 2} width={w} height={4} fill={color} opacity={0.75} />
         )
       })}
+      {playheadX != null && (
+        <line
+          x1={playheadX} y1={0}
+          x2={playheadX} y2={H}
+          stroke="rgba(255,255,255,0.85)"
+          strokeWidth={1.5}
+        />
+      )}
     </svg>
   )
 }
