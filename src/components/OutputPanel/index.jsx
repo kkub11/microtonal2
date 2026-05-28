@@ -202,6 +202,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
           playbackPos={playbackPos}
           totalDuration={totalDuration}
           onSeek={handleSeek}
+          onTestTone={() => getEngine().testTone()}
         />
         <WaveformSelector value={waveform} onChange={setWaveform} />
       </div>

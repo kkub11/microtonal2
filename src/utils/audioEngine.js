@@ -214,6 +214,21 @@ export class AudioEngine {
     if (this._voiceGains[voice]) this._voiceGains[voice].gain.value = value
   }
 
+  // Diagnostic: 440 Hz sine at gain 1.0 directly into destination, bypassing all gain nodes.
+  // If this is quiet, the issue is at the system/browser level, not the gain chain.
+  testTone(durationSec = 2) {
+    const ctx  = this._ensureContext()
+    const osc  = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.frequency.value = 440
+    gain.gain.value = 1.0
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    const t0 = ctx.currentTime + 0.01
+    osc.start(t0)
+    osc.stop(t0 + durationSec)
+  }
+
   // Current score position in seconds (distance from _startTime)
   get playbackPosition() {
     if (this._startTime === null || !this._ctx) return 0

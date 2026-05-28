@@ -12,6 +12,7 @@ export default function PlaybackControls({
   tempoScale, onTempoChange,
   masterGain, onMasterGainChange,
   playbackPos, totalDuration, onSeek,
+  onTestTone,
 }) {
   // localPos is non-null only while the user is dragging the scrubber
   const [localPos, setLocalPos] = useState(null)
@@ -54,6 +55,15 @@ export default function PlaybackControls({
         >
           {isPlaying ? 'Stop' : 'Play'}
         </button>
+        {/* <button
+          onClick={onTestTone}
+          title="440 Hz at gain 1.0, bypassing all gain nodes. Loud = gain chain issue. Quiet = system/browser volume."
+          className="px-3 py-2 rounded text-xs font-medium border border-slate-300
+                     dark:border-slate-600 text-slate-500 dark:text-slate-400
+                     hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        >
+          Test Tone
+        </button> */}
         <label className="text-sm flex items-center gap-2">
           Volume
           <input
