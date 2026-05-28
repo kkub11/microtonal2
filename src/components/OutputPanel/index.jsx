@@ -134,6 +134,11 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
     handleStop()
   }
 
+  // Restart from current position whenever waveform changes mid-play
+  useEffect(() => {
+    if (isPlaying) handlePlay(engineRef.current?.playbackPosition ?? 0)
+  }, [waveform]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
