@@ -26,9 +26,15 @@ export function findMOSSizes(edo, generatorSteps) {
   for (let size = 2; size < edo; size++) {
     if (isMOS(edo, g, size)) all.push(size)
   }
-  // Find and trim at the start of 3+ consecutive integers
+  // Trim the near-chromatic tail: 3+ consecutive integers starting at size >= edo/3.
+  // The threshold prevents early small MOS sizes like [2,3,4] from triggering the cut.
+  const tailThreshold = Math.ceil(edo / 3)
   for (let i = 2; i < all.length; i++) {
-    if (all[i] - all[i - 1] === 1 && all[i - 1] - all[i - 2] === 1) {
+    if (
+      all[i - 2] >= tailThreshold &&
+      all[i] - all[i - 1] === 1 &&
+      all[i - 1] - all[i - 2] === 1
+    ) {
       return all.slice(0, i - 1)
     }
   }
