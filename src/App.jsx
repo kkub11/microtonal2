@@ -8,6 +8,7 @@ import TonnetzPanel from './components/TonnetzPanel'
 import CommaScalePanel from './components/CommaScalePanel'
 import CostFunctionPanel from './components/CostFunctionPanel'
 import CompositionPanel from './components/CompositionPanel'
+import OutputPanel from './components/OutputPanel'
 
 const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
 
@@ -137,6 +138,13 @@ export default function App() {
               yInterval={state.yInterval}
               onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
               onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+            />
+          )}
+          {state.currentStep === 6 && (
+            <OutputPanel
+              snapshots={state.snapshots}
+              onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
+              rhythmSettings={state.rhythmSettings}
             />
           )}
         </main>

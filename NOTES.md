@@ -810,7 +810,7 @@ reference/
 
 ## Build Order (one Claude Code session per item)
 
-Sessions 1–6 are DONE. Continue from session 7.
+Sessions 1–13 are DONE. Continue from session 14.
 
 1. ~~TuningPanel~~ DONE
 2. ~~primeUtils.js + update PrimeSelector~~ DONE
@@ -820,18 +820,18 @@ Sessions 1–6 are DONE. Continue from session 7.
    colored interval arrows, repeating pitch class labels~~ DONE
 5. ~~CommaList + CommaDetail — filterable comma selector, path on Tonnetz~~ DONE
 6. ~~ScaleBuilder — auto (2-prime circulation) + manual Tonnetz picker~~ DONE
-7. costFunction.js + CostTable display with param sliders
-8. annealing.worker.js — continuous loop, SET_TEMPERATURE / SNAPSHOT /
-   PAUSE / RESET message protocol, posts cost updates to main thread
-9. CompositionPanel — TemperatureSlider (primary control), EnergyDisplay,
-   SnapshotButton/List, StartStopButton, all wired to worker
-10. rhythmUtils.js — simple version first (fixed divisor, equal notes,
-    no rests); then recursive subdivision with joining
-11. csoundIO.js — export score as CSound .txt; import existing files
-12. audioEngine.js — zip rhythm + scoreArray → noteEvents → Web Audio;
-    per-voice gain; PeriodicWave from f-tables
-13. OutputPanel — FoldedScore SVG, playback, snapshot selector,
-    export/import buttons
+7. ~~costFunction.js + CostTable display with param sliders~~ DONE
+8. ~~annealing.worker.js — continuous loop, SET_TEMPERATURE / SNAPSHOT /
+   PAUSE / RESET message protocol, posts cost updates to main thread~~ DONE
+9. ~~CompositionPanel — TemperatureSlider (primary control), EnergyDisplay,
+   SnapshotButton/List, StartStopButton, all wired to worker~~ DONE
+10. ~~rhythmUtils.js — simple version first (fixed divisor, equal notes,
+    no rests); then recursive subdivision with joining~~ DONE
+11. ~~csoundIO.js — export score as CSound .txt; import existing files~~ DONE
+12. ~~audioEngine.js — zip rhythm + scoreArray → noteEvents → Web Audio;
+    per-voice gain; PeriodicWave from f-tables~~ DONE
+13. ~~OutputPanel — FoldedScore SVG, playback, snapshot selector,
+    export/import buttons~~ DONE
 14. Polish, Tailwind theming, accessibility
 
 ---
