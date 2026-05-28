@@ -15,6 +15,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   const engineRef        = useRef(null)
   const rafRef           = useRef(null)
   const totalDurationRef = useRef(0)   // ref so rAF closure always reads latest value
+  const prevTempoRef     = useRef(1.0) // tracks previous tempoScale for position conversion
 
   const [selectedIdx,    setSelectedIdx]    = useState(0)
   const [waveform,       setWaveform]       = useState('sine')
@@ -138,6 +139,17 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   useEffect(() => {
     if (isPlaying) handlePlay(engineRef.current?.playbackPosition ?? 0)
   }, [waveform]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restart from proportionally equivalent position when tempo changes mid-play.
+  // oldPos is in the old tempo domain; multiply by (oldTempo/newTempo) to convert.
+  useEffect(() => {
+    if (isPlaying) {
+      const oldPos  = engineRef.current?.playbackPosition ?? 0
+      const newSeek = Math.max(0, oldPos * (prevTempoRef.current / tempoScale))
+      handlePlay(newSeek)
+    }
+    prevTempoRef.current = tempoScale
+  }, [tempoScale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
