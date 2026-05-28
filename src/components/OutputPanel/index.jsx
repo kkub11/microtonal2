@@ -114,11 +114,10 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   }
 
   function handleSeek(seekSec) {
+    setPlaybackPos(seekSec)   // set immediately so scrubber doesn't snap back on pointer-up
     if (isPlaying) {
       stopRaf()
-      handlePlay(seekSec)   // restarts engine from new position
-    } else {
-      setPlaybackPos(seekSec)
+      handlePlay(seekSec)
     }
   }
 
