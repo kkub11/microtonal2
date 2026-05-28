@@ -110,6 +110,8 @@ function runBatch() {
       temperature: s.temperature,
       totalCost:   s.totalCost,
       iteration:   s.iteration,
+      scoreArray:  new Int16Array(s.scoreArray),  // copy for audio preview
+      scoreShape:  s.shape,
     })
   }
 

@@ -247,8 +247,15 @@ export class AudioEngine {
     for (const g of this._voiceGains) g.disconnect()
     this._voiceGains  = []
     this._startTime   = null
+    this._totalDuration = 0
     this._allEvents   = []
     this._schedIdx    = 0
+  }
+
+  // Call this inside a user-gesture handler to create/resume the AudioContext before
+  // any programmatic play requests that arrive outside a gesture (e.g. from PROGRESS callbacks).
+  prepare() {
+    this._ensureContext()
   }
 
   setMasterGain(value) {
