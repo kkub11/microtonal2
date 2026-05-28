@@ -30,7 +30,18 @@ const initialState = {
   // Step 5
   cubeDims: [6, 6, 6],
   weights: { rangeWeight: 1.0, jumpWeight: 0.0, thematicWeight: 0.0 },
-  rhythmSettings: { measureSec: 5.0, divisor: 4 },
+  rhythmSettings: {
+    mode:              'simple',  // 'simple' | 'full'
+    measureSec:        5.0,
+    // simple mode
+    divisor:           4,
+    // full mode
+    allowedDivisors:   [2, 3],
+    minNoteSec:        0.15,
+    restProb:          0.1,
+    joinProb:          0.3,
+    independentVoices: true,
+  },
   snapshots: [],
   // Step 6 populated as we build it
 }

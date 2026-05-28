@@ -88,6 +88,38 @@ describe('generateFullRhythm', () => {
     events.forEach(e => expect(e.durationSec).toBeCloseTo(0.25))
   })
 
+  test('allowedDivisors=[2] produces only power-of-2 fractions of measureSec (joinProb=0)', () => {
+    const measureSec = 8
+    const events = generateFullRhythm(4, measureSec, {
+      allowedDivisors: [2],
+      joinProb: 0,
+      restProb: 0,
+      minNoteSec: 0.5,
+      maxDepth: 10,
+    })
+    // With ÷2 only and no joining, all leaf durations are measureSec / 2^k
+    const allowed = new Set([8, 4, 2, 1, 0.5])
+    events.forEach(e => {
+      expect(allowed.has(Math.round(e.durationSec * 1e8) / 1e8)).toBe(true)
+    })
+  })
+
+  test('allowedDivisors=[3] produces only 3-based fractions of measureSec (joinProb=0)', () => {
+    const measureSec = 9
+    const events = generateFullRhythm(3, measureSec, {
+      allowedDivisors: [3],
+      joinProb: 0,
+      restProb: 0,
+      minNoteSec: 1.0,
+      maxDepth: 10,
+    })
+    // With ÷3 only and no joining, each duration = 9 / 3^k for some integer k
+    events.forEach(e => {
+      const logRatio3 = Math.log(measureSec / e.durationSec) / Math.log(3)
+      expect(Math.abs(logRatio3 - Math.round(logRatio3))).toBeLessThan(1e-9)
+    })
+  })
+
   test('each measure produces at least one event', () => {
     const numMeasures = 12, measureSec = 5.0
     const events = generateFullRhythm(numMeasures, measureSec, { minNoteSec: 0.1, restProb: 0 })

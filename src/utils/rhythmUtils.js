@@ -23,7 +23,7 @@ function subdivide(startSec, durationSec, opts, depth) {
     return [{ startSec, durationSec, isRest: Math.random() < opts.restProb }]
   }
 
-  const n = [2, 3, 4, 5][Math.floor(Math.random() * 4)]
+  const n = opts.allowedDivisors[Math.floor(Math.random() * opts.allowedDivisors.length)]
   const part = durationSec / n
   const parts = Array.from({ length: n }, (_, i) => ({ s: startSec + i * part, d: part }))
 
@@ -47,18 +47,20 @@ function subdivide(startSec, durationSec, opts, depth) {
  * @param {number} numMeasures - Number of rhythmic measures
  * @param {number} measureSec - Duration of each measure in seconds
  * @param {object} [options]
- * @param {number} [options.minNoteSec=0.3] - Minimum note duration before recursion stops
- * @param {number} [options.restProb=0.08] - Probability a leaf note becomes a rest
- * @param {number} [options.joinProb=0.35] - Probability of joining adjacent equal parts
- * @param {number} [options.maxDepth=4] - Maximum recursion depth
+ * @param {number[]} [options.allowedDivisors=[2,3,4,5]] - Which subdivisions to pick from
+ * @param {number}   [options.minNoteSec=0.3]   - Minimum note duration before recursion stops
+ * @param {number}   [options.restProb=0.08]    - Probability a leaf note becomes a rest
+ * @param {number}   [options.joinProb=0.35]    - Probability of joining adjacent equal parts
+ * @param {number}   [options.maxDepth=4]       - Maximum recursion depth
  * @returns {{ startSec: number, durationSec: number, isRest: boolean }[]}
  */
 export function generateFullRhythm(numMeasures, measureSec, options = {}) {
   const opts = {
-    minNoteSec: options.minNoteSec ?? 0.3,
-    restProb:   options.restProb   ?? 0.08,
-    joinProb:   options.joinProb   ?? 0.35,
-    maxDepth:   options.maxDepth   ?? 4,
+    allowedDivisors: options.allowedDivisors ?? [2, 3, 4, 5],
+    minNoteSec:      options.minNoteSec      ?? 0.3,
+    restProb:        options.restProb        ?? 0.08,
+    joinProb:        options.joinProb        ?? 0.35,
+    maxDepth:        options.maxDepth        ?? 4,
   }
   const events = []
   for (let m = 0; m < numMeasures; m++) {

@@ -23,7 +23,6 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
   const [isPlaying,      setIsPlaying]      = useState(false)
   const [masterGain,     setMasterGain]     = useState(0.7)
   const [playbackPos,    setPlaybackPos]    = useState(0)
-  const [rhythmMode,     setRhythmMode]     = useState('full')
   const [importedEvents, setImportedEvents] = useState(null)
 
   const clampedIdx       = Math.min(selectedIdx, Math.max(0, snapshots.length - 1))
@@ -35,15 +34,33 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
     if (importedEvents) return importedEvents
     if (!selectedSnapshot?.scoreArray) return []
     const { scoreArray, scoreShape, scale, edo } = selectedSnapshot
-    const numMeasures    = scoreShape.slice(1).reduce((a, b) => a * b, 1)
-    const numVoices      = scoreShape[0]
-    const rhythmPerVoice = Array.from({ length: numVoices }, () =>
-      rhythmMode === 'full'
-        ? generateFullRhythm(numMeasures, rhythmSettings.measureSec)
-        : generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor)
-    )
+    const numMeasures = scoreShape.slice(1).reduce((a, b) => a * b, 1)
+    const numVoices   = scoreShape[0]
+
+    let rhythmPerVoice
+    if (rhythmSettings.mode === 'full') {
+      const fullOpts = {
+        allowedDivisors: rhythmSettings.allowedDivisors,
+        minNoteSec:      rhythmSettings.minNoteSec,
+        restProb:        rhythmSettings.restProb,
+        joinProb:        rhythmSettings.joinProb,
+      }
+      if (rhythmSettings.independentVoices) {
+        rhythmPerVoice = Array.from({ length: numVoices }, () =>
+          generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts)
+        )
+      } else {
+        const shared = generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts)
+        rhythmPerVoice = Array.from({ length: numVoices }, () => shared)
+      }
+    } else {
+      rhythmPerVoice = Array.from({ length: numVoices }, () =>
+        generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor)
+      )
+    }
+
     return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, BASE_HZ)
-  }, [importedEvents, selectedSnapshot, rhythmSettings, rhythmMode])
+  }, [importedEvents, selectedSnapshot, rhythmSettings])
 
   // Apply tempo scaling — higher tempoScale → shorter durations → faster playback
   const noteEvents = useMemo(() => {
@@ -138,9 +155,6 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
     handleStop()
   }
 
-  // Rhythm mode generates a new random schedule — stop so the user replays from scratch
-  useEffect(() => { handleStop() }, [rhythmMode]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Restart from current position whenever waveform changes mid-play
   useEffect(() => {
     if (isPlaying) handlePlay(engineRef.current?.playbackPosition ?? 0)
@@ -228,24 +242,6 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
           onTestTone={() => getEngine().testTone()}
         />
         <WaveformSelector value={waveform} onChange={setWaveform} />
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Rhythm</span>
-          <div className="flex rounded overflow-hidden border border-slate-300 dark:border-slate-600">
-            {['simple', 'full'].map(mode => (
-              <button
-                key={mode}
-                onClick={() => setRhythmMode(mode)}
-                className={`px-2.5 py-1 capitalize transition-colors ${
-                  rhythmMode === mode
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Empty state */}
