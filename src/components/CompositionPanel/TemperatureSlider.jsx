@@ -1,5 +1,5 @@
-// Log-scale mapping: slider 0–100 ↔ T 0.1–1000
-const T_MIN = 0.1, T_MAX = 1000
+// Log-scale mapping: slider 0–100 ↔ T 0.1–100000
+const T_MIN = 0.1, T_MAX = 100000
 const LOG_MIN = Math.log(T_MIN)
 const LOG_MAX = Math.log(T_MAX)
 
@@ -38,7 +38,7 @@ export default function TemperatureSlider({
         style={{ appearance: 'auto' }}
       />
       <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 font-mono select-none">
-        <span>0.1</span><span>1</span><span>10</span><span>100</span><span>1000</span>
+        <span>0.1</span><span>1</span><span>100</span><span>10k</span><span>100k</span>
       </div>
 
       {/* Auto-cool controls */}
