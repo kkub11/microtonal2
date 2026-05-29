@@ -216,17 +216,16 @@ describe('commaToTonnetzPath', () => {
     expect(hops[0].exponent).toBe(1)
   })
 
-  it('multi-prime comma: axis steps + hop are all present', () => {
+  it('multi-prime comma: axis steps + hop are all present, hop is last', () => {
     const path = commaToTonnetzPath([1, 2, -3, 1, 0, 0], P5, M3)
     const steps = path.filter(m => m.type === 'step')
     const hops = path.filter(m => m.type === 'hop')
     // 2 fifths and -3 major thirds → 5 axis steps; 1 hop for prime 7
     expect(steps).toHaveLength(5)
     expect(hops).toHaveLength(1)
-    // hop is interleaved (at midpoint)
+    // hop comes after all axis steps
     const hopIdx = path.indexOf(hops[0])
-    expect(hopIdx).toBeGreaterThan(0)
-    expect(hopIdx).toBeLessThan(path.length - 1)
+    expect(hopIdx).toBe(path.length - 1)
   })
 })
 

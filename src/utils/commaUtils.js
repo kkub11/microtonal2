@@ -224,7 +224,7 @@ export function commaToTonnetzPath(monzo, xInterval, yInterval) {
 
   if (hops.length === 0) return axisSteps
 
-  // Interleave hops at the midpoint of the axis step sequence
-  const half = Math.floor(axisSteps.length / 2)
-  return [...axisSteps.slice(0, half), ...hops, ...axisSteps.slice(half)]
+  // Append hops after all axis steps so the plane path travels its full distance
+  // before any dimensional jump (e.g. to cell 80, then hop back to 0).
+  return [...axisSteps, ...hops]
 }
