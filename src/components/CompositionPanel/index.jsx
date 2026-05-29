@@ -5,6 +5,7 @@ import WeightSliders from './WeightSliders'
 import RhythmSettings from './RhythmSettings'
 import TemperatureSlider from './TemperatureSlider'
 import EnergyDisplay from './EnergyDisplay'
+import PitchHistogram from './PitchHistogram'
 import StartStopButton from './StartStopButton'
 import SnapshotButton from './SnapshotButton'
 import SnapshotList from './SnapshotList'
@@ -14,11 +15,11 @@ import WaveformSelector from '../OutputPanel/WaveformSelector'
 
 const MAX_HISTORY = 500
 
-// Preview audio: short looping clip that refreshes with the latest score
 const PREVIEW_MEASURES    = 4
 const PREVIEW_MEASURE_SEC = 1.0
 const PREVIEW_DIVISOR     = 4
 const PREVIEW_BASE_HZ     = 72
+const PREVIEW_END_BUFFER  = 0.08  // seconds before clip end to trigger next start
 
 export default function CompositionPanel({
   scale, edo, costTable,
@@ -29,20 +30,21 @@ export default function CompositionPanel({
   rhythmSettings, onRhythmSettingsChange,
   snapshots, onSnapshotAdd,
 }) {
-  const workerRef        = useRef(null)
-  const audioRef            = useRef(null)    // AudioEngine instance
-  const previewRafRef       = useRef(null)    // rAF id for the preview loop
-  const latestScoreRef      = useRef(null)    // { scoreArray, scoreShape } from last PROGRESS
-  const isAnnealingRef      = useRef(false)   // true while worker is running
-  const previewWaveformRef  = useRef('sine')  // mirrors previewWaveform state for RAF closure
-  const previewGainRef      = useRef(0.7)     // mirrors previewGain state for RAF closure
+  const workerRef           = useRef(null)
+  const audioRef            = useRef(null)
+  const previewRafRef       = useRef(null)
+  const latestScoreRef      = useRef(null)
+  const isAnnealingRef      = useRef(false)
+  const previewWaveformRef  = useRef('sine')
+  const previewGainRef      = useRef(0.7)
 
-  const [status,       setStatus]   = useState('idle')  // 'idle' | 'running' | 'paused'
-  const [temperature,  setTemp]     = useState(200)
-  const [progress,     setProgress] = useState({ totalCost: null, iteration: 0 })
-  const [energyHistory, setHistory] = useState([])
-  const [autoCool,     setAutoCool] = useState(false)
-  const [coolRate,     setCoolRate] = useState(0.995)
+  const [status,        setStatus]    = useState('idle')
+  const [temperature,   setTemp]      = useState(200)
+  const [progress,      setProgress]  = useState({ totalCost: null, iteration: 0 })
+  const [energyHistory, setHistory]   = useState([])
+  const [histCounts,    setHistCounts] = useState([])
+  const [autoCool,      setAutoCool]  = useState(false)
+  const [coolRate,      setCoolRate]  = useState(0.995)
   const [previewOn,       setPreviewOn]       = useState(true)
   const [previewWaveform, setPreviewWaveform] = useState('sine')
   const [previewGain,     setPreviewGain]     = useState(0.7)
@@ -89,6 +91,12 @@ export default function CompositionPanel({
       ])
       if (data.scoreArray) {
         latestScoreRef.current = { scoreArray: data.scoreArray, scoreShape: data.scoreShape }
+        const counts = new Array(scale.length).fill(0)
+        for (let k = 0; k < data.scoreArray.length; k++) {
+          const d = data.scoreArray[k]
+          if (d >= 0 && d < scale.length) counts[d]++
+        }
+        setHistCounts(counts)
       }
     } else if (data.type === 'SNAPSHOT') {
       onSnapshotAdd({
@@ -124,7 +132,6 @@ export default function CompositionPanel({
     function tick() {
       const pos   = engine.playbackPosition
       const total = engine.totalDuration
-      // Restart when the clip ends (or hasn't started yet — total===0)
       if (total === 0 || pos >= total - PREVIEW_END_BUFFER) {
         const s = latestScoreRef.current
         if (s) {
@@ -151,8 +158,6 @@ export default function CompositionPanel({
     audioRef.current?.stop()
   }
 
-  const PREVIEW_END_BUFFER = 0.08  // seconds before clip end to trigger next start
-
   // ─── Controls ───────────────────────────────────────────────────────────────
   function handleStart() {
     if (!ready) return
@@ -175,7 +180,6 @@ export default function CompositionPanel({
       temperature,
     })
 
-    // Create/resume AudioContext while inside a user-gesture handler
     if (!audioRef.current) audioRef.current = new AudioEngineClass()
     audioRef.current.prepare()
     latestScoreRef.current = null
@@ -184,6 +188,7 @@ export default function CompositionPanel({
 
     setStatus('running')
     setHistory([])
+    setHistCounts([])
     setProgress({ totalCost: null, iteration: 0 })
   }
 
@@ -205,6 +210,7 @@ export default function CompositionPanel({
     setStatus('idle')
     setProgress({ totalCost: null, iteration: 0 })
     setHistory([])
+    setHistCounts([])
   }
 
   function handleTemperature(T) {
@@ -238,7 +244,7 @@ export default function CompositionPanel({
 
       {ready && (
         <>
-          {/* ── System configuration ── */}
+          {/* ── Settings ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -256,7 +262,6 @@ export default function CompositionPanel({
             </div>
           </div>
 
-          {/* ── Rhythm settings ── */}
           <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
               Rhythm Settings
@@ -264,92 +269,108 @@ export default function CompositionPanel({
             <RhythmSettings rhythmSettings={rhythmSettings} onChange={onRhythmSettingsChange} />
           </div>
 
-          {/* ── Temperature (PRIMARY) ── */}
-          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 ring-1 ring-violet-200 dark:ring-violet-800">
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-semibold text-violet-700 dark:text-violet-400">
-                Temperature — PRIMARY CONTROL
-              </label>
-              <span className="text-xs text-slate-400 dark:text-slate-500">drag to find the musical sweet spot</span>
+          {/* ── Start + Audio Preview ── */}
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <StartStopButton
+                status={status}
+                disabled={!ready}
+                onStart={handleStart}
+                onPauseResume={handlePauseResume}
+                onReset={handleReset}
+              />
             </div>
-            <TemperatureSlider
-              temperature={temperature}
-              onChange={handleTemperature}
-              autoCool={autoCool}
-              onAutoCoolChange={setAutoCool}
-              coolRate={coolRate}
-              onCoolRateChange={setCoolRate}
-              disabled={status === 'idle'}
-            />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={previewOn}
+                  onChange={e => {
+                    const on = e.target.checked
+                    setPreviewOn(on)
+                    if (!on) stopPreview()
+                    else if (isAnnealingRef.current) startPreviewLoop()
+                  }}
+                  className="w-4 h-4 rounded accent-violet-600"
+                />
+                <span className="text-xs text-slate-500 dark:text-slate-400">Audio preview</span>
+              </label>
+              <label className="text-xs flex items-center gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Volume</span>
+                <input
+                  type="range" min={0} max={1} step={0.02} value={previewGain}
+                  onChange={e => {
+                    const v = Number(e.target.value)
+                    setPreviewGain(v)
+                    previewGainRef.current = v
+                    audioRef.current?.setMasterGain(v)
+                  }}
+                  className="w-24 accent-violet-600"
+                />
+                <span className="tabular-nums text-slate-500 dark:text-slate-400 w-8">
+                  {Math.round(previewGain * 100)}%
+                </span>
+              </label>
+              <WaveformSelector
+                value={previewWaveform}
+                onChange={v => { setPreviewWaveform(v); previewWaveformRef.current = v }}
+              />
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {status === 'idle'    && 'Press Start to begin annealing.'}
+              {status === 'running' && 'Running — drag the temperature slider to find the sweet spot.'}
+              {status === 'paused'  && 'Paused.'}
+            </div>
           </div>
 
-          {/* ── Controls + Energy ── */}
+          {/* ── Live displays: Energy + Histogram ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Controls
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <StartStopButton
-                  status={status}
-                  disabled={!ready}
-                  onStart={handleStart}
-                  onPauseResume={handlePauseResume}
-                  onReset={handleReset}
-                />
-                <SnapshotButton
-                  disabled={status !== 'running' && status !== 'paused'}
-                  onSnapshot={handleSnapshot}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={previewOn}
-                    onChange={e => {
-                      const on = e.target.checked
-                      setPreviewOn(on)
-                      if (!on) stopPreview()
-                      else if (isAnnealingRef.current) startPreviewLoop()
-                    }}
-                    className="w-4 h-4 rounded accent-violet-600"
-                  />
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Audio preview</span>
-                </label>
-                <label className="text-xs flex items-center gap-2">
-                  <span className="text-slate-500 dark:text-slate-400">Volume</span>
-                  <input
-                    type="range" min={0} max={1} step={0.02} value={previewGain}
-                    onChange={e => {
-                      const v = Number(e.target.value)
-                      setPreviewGain(v)
-                      previewGainRef.current = v
-                      audioRef.current?.setMasterGain(v)
-                    }}
-                    className="w-24 accent-violet-600"
-                  />
-                  <span className="tabular-nums text-slate-500 dark:text-slate-400 w-8">
-                    {Math.round(previewGain * 100)}%
-                  </span>
-                </label>
-                <WaveformSelector
-                  value={previewWaveform}
-                  onChange={v => { setPreviewWaveform(v); previewWaveformRef.current = v }}
-                />
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {status === 'idle' && 'Press Start to begin annealing.'}
-                {status === 'running' && 'Running — drag the temperature slider above.'}
-                {status === 'paused' && 'Paused.'}
-              </div>
-            </div>
-
             <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Energy
               </label>
               <EnergyDisplay progress={progress} energyHistory={energyHistory} />
+            </div>
+
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Pitch Distribution
+              </label>
+              <PitchHistogram histCounts={histCounts} />
+            </div>
+          </div>
+
+          {/* ── Temperature + Snapshot ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 ring-1 ring-violet-200 dark:ring-violet-800">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                  Temperature
+                </label>
+                <span className="text-xs text-slate-400 dark:text-slate-500">primary control</span>
+              </div>
+              <TemperatureSlider
+                temperature={temperature}
+                onChange={handleTemperature}
+                autoCool={autoCool}
+                onAutoCoolChange={setAutoCool}
+                coolRate={coolRate}
+                onCoolRateChange={setCoolRate}
+                disabled={status === 'idle'}
+              />
+            </div>
+
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Snapshot
+              </label>
+              <SnapshotButton
+                disabled={status !== 'running' && status !== 'paused'}
+                onSnapshot={handleSnapshot}
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Save the current score at this temperature. Take multiple snapshots to compare.
+              </p>
             </div>
           </div>
 
