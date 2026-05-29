@@ -53,6 +53,7 @@ export function computeCostTable(scale, edo, primes, { power = 2.0, maxPQ = 20, 
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const intervalCents = ((scale[j] - scale[i] + edo) % edo) * edoStepCents
+      if (intervalCents === 0) continue  // unison: cost stays 0.0
       let score = 0
       for (const { cents, tenney } of ratios) {
         const diff = Math.abs(cents - intervalCents)

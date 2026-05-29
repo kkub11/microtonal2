@@ -14,13 +14,10 @@ describe('computeCostTable', () => {
     expect(t.length).toBe(N * N)
   })
 
-  it('diagonal (unison) entries have maximum cost', () => {
+  it('diagonal (unison) entries have cost 0', () => {
     const t = computeCostTable(scale, edo, primes)
-    // With primes=[2,3,5] and maxPQ=20 the smallest ratio is 16:15 at ~112¢,
-    // which is more than 50¢ from unison (0¢), so score=0 → cost=1/0.001=1000
-    const unisonCost = 1.0 / 0.001
     for (let i = 0; i < N; i++) {
-      expect(t[i * N + i]).toBeCloseTo(unisonCost, 0)
+      expect(t[i * N + i]).toBe(0)
     }
   })
 
@@ -30,10 +27,13 @@ describe('computeCostTable', () => {
     expect(t[0 * N + 2]).toBeLessThan(t[0 * N + 1])
   })
 
-  it('all entries are positive', () => {
+  it('all non-unison entries are positive', () => {
     const t = computeCostTable(scale, edo, primes)
-    for (let k = 0; k < t.length; k++) {
-      expect(t[k]).toBeGreaterThan(0)
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        if (i === j) expect(t[i * N + j]).toBe(0)
+        else expect(t[i * N + j]).toBeGreaterThan(0)
+      }
     }
   })
 
