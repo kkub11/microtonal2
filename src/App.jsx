@@ -26,7 +26,7 @@ const initialState = {
   // Step 4
   costParams: { power: 2.0, maxPQ: 20, proximityK: 0.1 },
   voiceCount: 3,
-  voiceSettings: [],
+  voiceSettings: [{ centerHz: 131 }, { centerHz: 196 }, { centerHz: 294 }],
   // Step 5
   cubeDims: [6, 6, 6],
   weights: { rangeWeight: 1.0, jumpWeight: 0.0, thematicWeight: 0.0 },

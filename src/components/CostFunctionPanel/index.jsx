@@ -36,8 +36,6 @@ export default function CostFunctionPanel({
               <VoiceSettings
                 voiceCount={voiceCount}
                 voiceSettings={voiceSettings}
-                scale={scale}
-                edo={edo}
                 onChange={onVoiceSettingsChange}
               />
             </div>

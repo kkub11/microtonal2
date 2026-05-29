@@ -59,7 +59,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
       )
     }
 
-    return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, BASE_HZ)
+    return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, BASE_HZ, null, selectedSnapshot.voiceSettings)
   }, [importedEvents, selectedSnapshot, rhythmSettings])
 
   // Apply tempo scaling — higher tempoScale → shorter durations → faster playback

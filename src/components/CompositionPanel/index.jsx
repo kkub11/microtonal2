@@ -37,6 +37,8 @@ export default function CompositionPanel({
   const isAnnealingRef      = useRef(false)
   const previewWaveformRef  = useRef('sine')
   const previewGainRef      = useRef(0.7)
+  const voiceSettingsRef    = useRef(voiceSettings)
+  useEffect(() => { voiceSettingsRef.current = voiceSettings }, [voiceSettings])
 
   const [status,        setStatus]    = useState('idle')
   const [temperature,   setTemp]      = useState(200)
@@ -100,18 +102,43 @@ export default function CompositionPanel({
       }
     } else if (data.type === 'SNAPSHOT') {
       onSnapshotAdd({
-        id:         Date.now(),
-        timestamp:  Date.now(),
-        scoreArray: data.scoreArray,
-        scoreShape: data.scoreShape,
-        temperature: data.temperature,
-        totalCost:   data.totalCost,
-        iteration:   data.iteration,
+        id:           Date.now(),
+        timestamp:    Date.now(),
+        scoreArray:   data.scoreArray,
+        scoreShape:   data.scoreShape,
+        temperature:  data.temperature,
+        totalCost:    data.totalCost,
+        iteration:    data.iteration,
         scale,
         edo,
+        voiceSettings: voiceSettingsRef.current ?? [],
       })
     }
   }, [onSnapshotAdd, scale, edo])
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  // Find the nearest scale degree to centerHz within its octave (for annealing penalty).
+  function centerHzToScaleDeg(centerHz) {
+    const N      = scale.length
+    const octave = Math.floor(Math.log2(centerHz / PREVIEW_BASE_HZ))
+    let bestIdx = 0, bestDist = Infinity
+    for (let i = 0; i < N; i++) {
+      const hz   = PREVIEW_BASE_HZ * Math.pow(2, octave + scale[i] / edo)
+      const dist = Math.abs(hz - centerHz)
+      if (dist < bestDist) { bestDist = dist; bestIdx = i }
+    }
+    return bestIdx
+  }
+
+  // Translate Hz-based voiceSettings to scale-degree form for the annealing worker.
+  function translateVoiceSettings(vs) {
+    const N = scale.length
+    return (vs ?? []).map(s => ({
+      center: s.centerHz != null ? centerHzToScaleDeg(s.centerHz) : Math.floor(N / 2),
+      range:  N,
+    }))
+  }
 
   // ─── Preview audio ───────────────────────────────────────────────────────────
 
@@ -121,7 +148,10 @@ export default function CompositionPanel({
     const rhythmPerVoice = Array.from({ length: numVoices }, () =>
       generateSimpleRhythm(PREVIEW_MEASURES, PREVIEW_MEASURE_SEC, PREVIEW_DIVISOR)
     )
-    return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, PREVIEW_BASE_HZ)
+    return buildNoteEvents(
+      scoreArray, scoreShape, scale, edo, rhythmPerVoice,
+      PREVIEW_BASE_HZ, null, voiceSettingsRef.current,
+    )
   }
 
   function startPreviewLoop() {
@@ -175,7 +205,7 @@ export default function CompositionPanel({
       costTable:     new Float32Array(costTable),
       scoreShape:    [voiceCount, ...cubeDims],
       N:             scale.length,
-      voiceSettings: voiceSettings ?? [],
+      voiceSettings: translateVoiceSettings(voiceSettings),
       weights,
       temperature,
     })

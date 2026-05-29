@@ -41,6 +41,9 @@ export function parseFTables(csoundText) {
  * scoreArray[v * numScoreSlots + k] is the scale index for voice v, event k.
  * If rhythmPerVoice[v] has more events than numScoreSlots, pitch indices wrap.
  *
+ * voiceSettings[v].centerHz shifts the voice into the appropriate octave:
+ * octave = floor(log2(centerHz / baseHz)), applied as a frequency multiplier.
+ *
  * @param {Int16Array}  scoreArray      Flat array of scale-degree indices
  * @param {number[]}    scoreShape      e.g. [3, 6, 6, 6] — first dim is numVoices
  * @param {number[]}    scale           EDO step for each scale degree
@@ -48,11 +51,12 @@ export function parseFTables(csoundText) {
  * @param {object[][]}  rhythmPerVoice  rhythmPerVoice[v] = [{startSec, durationSec, isRest}, ...]
  * @param {number}      [baseHz=72]     Reference frequency in Hz
  * @param {number[]}    [gainPerVoice]  Per-voice gain (default 0.4)
+ * @param {object[]}    [voiceSettings] voiceSettings[v] = { centerHz } for octave placement
  * @returns {{ startSec, durationSec, freqHz, voice, gainValue, isRest }[]}
  */
 export function buildNoteEvents(
   scoreArray, scoreShape, scale, edo,
-  rhythmPerVoice, baseHz = 72, gainPerVoice = null,
+  rhythmPerVoice, baseHz = 72, gainPerVoice = null, voiceSettings = null,
 ) {
   const numVoices    = scoreShape[0]
   const numScoreSlots = scoreShape.slice(1).reduce((a, b) => a * b, 1)
@@ -63,12 +67,14 @@ export function buildNoteEvents(
     const rhythm      = rhythmPerVoice[v] ?? []
     const baseOffset  = v * numScoreSlots
     const voiceGain   = gainPerVoice?.[v] ?? 0.4
+    const centerHz    = voiceSettings?.[v]?.centerHz
+    const octave      = centerHz != null ? Math.floor(Math.log2(centerHz / baseHz)) : 0
 
     for (let k = 0; k < rhythm.length; k++) {
       const { startSec, durationSec, isRest } = rhythm[k]
       const pitchIdx = scoreArray[baseOffset + (k % numScoreSlots)]
       const edoStep  = scale[pitchIdx % N]
-      const freqHz   = baseHz * Math.pow(2, edoStep / edo)
+      const freqHz   = baseHz * Math.pow(2, edoStep / edo + octave)
       noteEvents.push({ startSec, durationSec, freqHz, voice: v, gainValue: voiceGain, isRest })
     }
   }
