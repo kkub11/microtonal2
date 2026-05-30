@@ -4,7 +4,7 @@ import VoiceCountSelector from './VoiceCountSelector'
 import WeightSliders from './WeightSliders'
 import RhythmSettings from './RhythmSettings'
 import TemperatureSlider from './TemperatureSlider'
-import EnergyDisplay from './EnergyDisplay'
+import EnergyDisplay, { N_ENERGY_BUCKETS, tempToBucket } from './EnergyDisplay'
 import PitchHistogram from './PitchHistogram'
 import StartStopButton from './StartStopButton'
 import SnapshotButton from './SnapshotButton'
@@ -12,8 +12,6 @@ import SnapshotList from './SnapshotList'
 import { AudioEngine as AudioEngineClass, buildNoteEvents, F_TABLES } from '../../utils/audioEngine'
 import { generateSimpleRhythm } from '../../utils/rhythmUtils'
 import WaveformSelector from '../OutputPanel/WaveformSelector'
-
-const MAX_HISTORY = 500
 
 const PREVIEW_MEASURES    = 4
 const PREVIEW_MEASURE_SEC = 1.0
@@ -43,7 +41,7 @@ export default function CompositionPanel({
   const [status,        setStatus]    = useState('idle')
   const [temperature,   setTemp]      = useState(200)
   const [progress,      setProgress]  = useState({ totalCost: null, iteration: 0 })
-  const [energyHistory, setHistory]   = useState([])
+  const [energyBuckets, setEnergyBuckets] = useState(() => new Array(N_ENERGY_BUCKETS).fill(null))
   const [histCounts,    setHistCounts] = useState([])
   const [autoCool,      setAutoCool]  = useState(false)
   const [coolRate,      setCoolRate]  = useState(0.995)
@@ -87,10 +85,12 @@ export default function CompositionPanel({
   const handleMessage = useCallback(({ data }) => {
     if (data.type === 'PROGRESS') {
       setProgress({ totalCost: data.totalCost, iteration: data.iteration })
-      setHistory(prev => [
-        ...prev.slice(-(MAX_HISTORY - 1)),
-        { temperature: data.temperature, cost: data.totalCost },
-      ])
+      const bi = tempToBucket(data.temperature)
+      setEnergyBuckets(prev => {
+        const next = prev.slice()
+        next[bi] = { temperature: data.temperature, cost: data.totalCost }
+        return next
+      })
       if (data.scoreArray) {
         latestScoreRef.current = { scoreArray: data.scoreArray, scoreShape: data.scoreShape }
         const counts = new Array(scale.length).fill(0)
@@ -217,7 +217,7 @@ export default function CompositionPanel({
     if (previewOn) startPreviewLoop()
 
     setStatus('running')
-    setHistory([])
+    setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
     setProgress({ totalCost: null, iteration: 0 })
   }
@@ -239,7 +239,7 @@ export default function CompositionPanel({
     stopPreview()
     setStatus('idle')
     setProgress({ totalCost: null, iteration: 0 })
-    setHistory([])
+    setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
   }
 
@@ -359,7 +359,7 @@ export default function CompositionPanel({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Energy
               </label>
-              <EnergyDisplay progress={progress} energyHistory={energyHistory} />
+              <EnergyDisplay progress={progress} energyBuckets={energyBuckets} />
             </div>
 
             <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
