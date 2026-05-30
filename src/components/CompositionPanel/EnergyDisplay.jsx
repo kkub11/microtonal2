@@ -80,7 +80,7 @@ export default function EnergyDisplay({ progress, energyBuckets }) {
       </div>
 
       {/* Energy graph */}
-      {filled.length >= 2 && (
+      {filled.length >= 1 && (
         <div>
           <svg width={W} height={H} className="rounded overflow-visible"
             style={{ background: 'rgb(15 23 42)' }}>
