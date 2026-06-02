@@ -1,4 +1,5 @@
 import { useReducer, useMemo } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { computeTuningError } from './utils/edoUtils'
 import { computeCostTable } from './utils/costFunction'
 import Header from './components/Header'
@@ -80,86 +81,89 @@ export default function App() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <Header />
-        <WorkflowStepper
-          steps={STEPS}
-          currentStep={state.currentStep}
-          onStepClick={(step) => dispatch({ type: 'SET_STEP', payload: step })}
-        />
-        <main className="py-8">
-          {state.currentStep === 1 && (
-            <TuningPanel
-              edo={state.edo}
-              primes={state.primes}
-              tuningErrors={tuningErrors}
-              onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
-              onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
-            />
-          )}
-          {state.currentStep === 3 && (
-            <CommaScalePanel
-              edo={state.edo}
-              primes={state.primes}
-              xInterval={state.xInterval}
-              yInterval={state.yInterval}
-              selectedComma={state.selectedComma}
-              scale={state.scale}
-              onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
-              onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
-              onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
-            />
-          )}
-          {state.currentStep === 5 && (
-            <CompositionPanel
-              scale={state.scale}
-              edo={state.edo}
-              costTable={costTable}
-              voiceCount={state.voiceCount}
-              onVoiceCountChange={(n) => dispatch({ type: 'SET_VOICE_COUNT', payload: n })}
-              voiceSettings={state.voiceSettings}
-              cubeDims={state.cubeDims}
-              onCubeDimsChange={(d) => dispatch({ type: 'SET_CUBE_DIMS', payload: d })}
-              weights={state.weights}
-              onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
-              rhythmSettings={state.rhythmSettings}
-              onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
-              snapshots={state.snapshots}
-              onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
-            />
-          )}
-          {state.currentStep === 4 && (
-            <CostFunctionPanel
-              scale={state.scale}
-              edo={state.edo}
-              costTable={costTable}
-              costParams={state.costParams}
-              onCostParamsChange={(p) => dispatch({ type: 'SET_COST_PARAMS', payload: p })}
-              voiceCount={state.voiceCount}
-              voiceSettings={state.voiceSettings}
-              onVoiceSettingsChange={(vs) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: vs })}
-            />
-          )}
-          {state.currentStep === 2 && (
-            <TonnetzPanel
-              edo={state.edo}
-              primes={state.primes}
-              xInterval={state.xInterval}
-              yInterval={state.yInterval}
-              onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
-              onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
-            />
-          )}
-          {state.currentStep === 6 && (
-            <OutputPanel
-              snapshots={state.snapshots}
-              onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
-              rhythmSettings={state.rhythmSettings}
-            />
-          )}
-        </main>
+    <>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          <Header />
+          <WorkflowStepper
+            steps={STEPS}
+            currentStep={state.currentStep}
+            onStepClick={(step) => dispatch({ type: 'SET_STEP', payload: step })}
+          />
+          <main className="py-8">
+            {state.currentStep === 1 && (
+              <TuningPanel
+                edo={state.edo}
+                primes={state.primes}
+                tuningErrors={tuningErrors}
+                onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
+                onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
+              />
+            )}
+            {state.currentStep === 3 && (
+              <CommaScalePanel
+                edo={state.edo}
+                primes={state.primes}
+                xInterval={state.xInterval}
+                yInterval={state.yInterval}
+                selectedComma={state.selectedComma}
+                scale={state.scale}
+                onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
+                onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
+                onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+              />
+            )}
+            {state.currentStep === 5 && (
+              <CompositionPanel
+                scale={state.scale}
+                edo={state.edo}
+                costTable={costTable}
+                voiceCount={state.voiceCount}
+                onVoiceCountChange={(n) => dispatch({ type: 'SET_VOICE_COUNT', payload: n })}
+                voiceSettings={state.voiceSettings}
+                cubeDims={state.cubeDims}
+                onCubeDimsChange={(d) => dispatch({ type: 'SET_CUBE_DIMS', payload: d })}
+                weights={state.weights}
+                onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
+                rhythmSettings={state.rhythmSettings}
+                onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
+                snapshots={state.snapshots}
+                onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
+              />
+            )}
+            {state.currentStep === 4 && (
+              <CostFunctionPanel
+                scale={state.scale}
+                edo={state.edo}
+                costTable={costTable}
+                costParams={state.costParams}
+                onCostParamsChange={(p) => dispatch({ type: 'SET_COST_PARAMS', payload: p })}
+                voiceCount={state.voiceCount}
+                voiceSettings={state.voiceSettings}
+                onVoiceSettingsChange={(vs) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: vs })}
+              />
+            )}
+            {state.currentStep === 2 && (
+              <TonnetzPanel
+                edo={state.edo}
+                primes={state.primes}
+                xInterval={state.xInterval}
+                yInterval={state.yInterval}
+                onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
+                onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+              />
+            )}
+            {state.currentStep === 6 && (
+              <OutputPanel
+                snapshots={state.snapshots}
+                onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
+                rhythmSettings={state.rhythmSettings}
+              />
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+      <Analytics />
+    </>
   )
 }
