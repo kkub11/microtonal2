@@ -1,6 +1,10 @@
-function gcd(a, b) {
+export function gcd(a, b) {
   while (b) { [a, b] = [b, a % b] }
   return a
+}
+
+export function tonnetzPlanes(xSteps, ySteps, edo) {
+  return gcd(gcd(Math.abs(xSteps), Math.abs(ySteps)), edo)
 }
 
 export const INTERVAL_NAMES = {

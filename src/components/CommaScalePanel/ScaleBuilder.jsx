@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { getBestApprox, enumerateJustIntervals } from '../../utils/edoUtils'
+import { useState, useMemo, useEffect } from 'react'
+import { getBestApprox, enumerateJustIntervals, tonnetzPlanes } from '../../utils/edoUtils'
 import { commaToTonnetzPath, commaPathPositions, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
 
@@ -215,7 +215,7 @@ function AutoMode({ edo, primes, defaultGenerator, onSelect }) {
 
 // ─── Manual mode ────────────────────────────────────────────────────────────
 
-function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onToggle }) {
+function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onToggle, planeOffset = 0 }) {
   const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
   const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
 
@@ -237,7 +237,7 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
           Array.from({ length: MAN_COLS }, (_, col) => {
             const lx = col - originCol
             const ly = originRow - row
-            const pc       = ((lx * xSteps + ly * ySteps) % edo + edo) % edo
+            const pc       = ((lx * xSteps + ly * ySteps + planeOffset) % edo + edo) % edo
             const cellKey  = `${lx},${ly}`
             const onPath   = pathData.cells.has(cellKey)
             const hopDep   = pathData.hopDep.get(cellKey)
@@ -297,6 +297,11 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
 
 function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalChange }) {
   const [selectedPCs, setSelectedPCs] = useState(new Set())
+  const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
+  const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
+  const numPlanes = useMemo(() => tonnetzPlanes(xSteps, ySteps, edo), [xSteps, ySteps, edo])
+  const [planeOffset, setPlaneOffset] = useState(0)
+  useEffect(() => { setPlaneOffset(0) }, [numPlanes])
 
   function togglePC(pc) {
     setSelectedPCs(prev => {
@@ -356,9 +361,27 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalCha
         )
       })()}
 
+      {numPlanes > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 dark:text-slate-400">Plane</span>
+          <select
+            value={planeOffset}
+            onChange={e => setPlaneOffset(Number(e.target.value))}
+            className="text-xs px-2 py-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+          >
+            {Array.from({ length: numPlanes }, (_, k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            ({numPlanes} planes)
+          </span>
+        </div>
+      )}
       <InteractiveTonnetz
         edo={edo} xInterval={xInterval} yInterval={yInterval}
         comma={comma} selectedPCs={selectedPCs} onToggle={togglePC}
+        planeOffset={planeOffset}
       />
 
       {scale.length > 0 ? (

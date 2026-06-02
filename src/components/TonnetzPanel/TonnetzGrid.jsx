@@ -42,7 +42,7 @@ const btnClass = [
   'hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors',
 ].join(' ')
 
-export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval }) {
+export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval, planeOffset = 0 }) {
   const X_COLOR = intervalColor(xInterval.ratio)
   const Y_COLOR = intervalColor(yInterval.ratio)
   const [scale, setScale] = useState(1)
@@ -78,12 +78,12 @@ export default function TonnetzGrid({ edo, xSteps, ySteps, xInterval, yInterval 
       for (let col = 0; col < COLS; col++) {
         const dx = col - CX
         const dy = CY - row  // lattice y increases upward; SVG y increases downward
-        const pc = ((dx * xSteps + dy * ySteps) % edo + edo) % edo
+        const pc = ((dx * xSteps + dy * ySteps + planeOffset) % edo + edo) % edo
         out.push({ col, row, dx, dy, pc, x: col * STEP, y: row * STEP })
       }
     }
     return out
-  }, [COLS, ROWS, CX, CY, xSteps, ySteps, edo])
+  }, [COLS, ROWS, CX, CY, xSteps, ySteps, edo, planeOffset])
 
   if (xSteps === 0 || ySteps === 0) {
     return (
