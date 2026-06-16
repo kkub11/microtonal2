@@ -7,6 +7,7 @@ import FoldedScore from './FoldedScore'
 import PlaybackControls from './PlaybackControls'
 import WaveformSelector from './WaveformSelector'
 import ExportButton from './ExportButton'
+import WavExportButton from './WavExportButton'
 import ImportButton from './ImportButton'
 
 const BASE_HZ = 72
@@ -194,6 +195,12 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
             snapshot={selectedSnapshot}
             noteEvents={noteEvents}
             baseHz={BASE_HZ}
+          />
+          <WavExportButton
+            noteEvents={noteEvents}
+            waveform={waveform}
+            masterGain={masterGain}
+            snapshot={selectedSnapshot}
           />
         </div>
       </div>

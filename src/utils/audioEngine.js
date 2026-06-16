@@ -87,6 +87,121 @@ const RELEASE_SEC       = 0.020
 const SCHEDULE_AHEAD_SEC = 10   // rolling lookahead window in seconds
 
 /**
+ * Encode a Float32Array (mono or interleaved stereo) as a 16-bit PCM WAV blob.
+ * @param {Float32Array} samples  Interleaved PCM in [-1, 1]
+ * @param {number}       sampleRate
+ * @param {number}       numChannels  1 or 2
+ * @returns {Blob}
+ */
+export function encodeWav(samples, sampleRate, numChannels = 1) {
+  const numSamples = samples.length
+  const dataBytes  = numSamples * 2  // 16-bit = 2 bytes per sample
+  const buffer     = new ArrayBuffer(44 + dataBytes)
+  const view       = new DataView(buffer)
+
+  function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+  }
+  function clamp16(x) { return Math.max(-32768, Math.min(32767, Math.round(x * 32767))) }
+
+  writeStr(0,  'RIFF')
+  view.setUint32(4,  36 + dataBytes, true)
+  writeStr(8,  'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true)            // PCM chunk size
+  view.setUint16(20, 1,  true)            // PCM format
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * numChannels * 2, true)  // byte rate
+  view.setUint16(32, numChannels * 2, true)               // block align
+  view.setUint16(34, 16, true)            // bits per sample
+  writeStr(36, 'data')
+  view.setUint32(40, dataBytes, true)
+
+  for (let i = 0; i < numSamples; i++)
+    view.setInt16(44 + i * 2, clamp16(samples[i]), true)
+
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+/**
+ * Render note events to a WAV Blob using OfflineAudioContext (non-realtime).
+ * Mirrors the AudioEngine playback graph exactly.
+ *
+ * @param {object[]} noteEvents   Output of buildNoteEvents
+ * @param {object}   [options]    Same shape as AudioEngine.start() options
+ * @param {number}   [sampleRate=44100]
+ * @returns {Promise<Blob>}
+ */
+export async function renderToWav(noteEvents, options = {}, sampleRate = 44100) {
+  const {
+    waveform   = 'sine',
+    harmonics  = null,
+    voiceGains = [],
+    masterGain = 0.5,
+  } = options
+
+  const totalDuration = noteEvents.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
+  if (totalDuration <= 0) throw new Error('No note events to render')
+
+  // Small tail so the last note's release doesn't get clipped
+  const lengthSamples  = Math.ceil((totalDuration + 0.1) * sampleRate)
+  const numVoices      = noteEvents.reduce((m, e) => Math.max(m, e.voice + 1), 0)
+
+  const ctx            = new OfflineAudioContext(1, lengthSamples, sampleRate)
+  const master         = ctx.createGain()
+  master.gain.value    = masterGain
+  master.connect(ctx.destination)
+
+  const vGains = Array.from({ length: numVoices }, (_, v) => {
+    const g = ctx.createGain()
+    g.gain.value = voiceGains[v] ?? 1.0
+    g.connect(master)
+    return g
+  })
+
+  let periodicWave = null
+  if (harmonics) {
+    const size = harmonics.length + 1
+    const real = new Float32Array(size)
+    const imag = new Float32Array(size)
+    for (let i = 0; i < harmonics.length; i++) imag[i + 1] = harmonics[i]
+    periodicWave = ctx.createPeriodicWave(real, imag)
+  }
+
+  for (const e of noteEvents) {
+    if (e.isRest || !(e.freqHz > 0) || e.durationSec <= 0) continue
+    const t0 = e.startSec
+    const t1 = t0 + e.durationSec
+    const tA = Math.min(t0 + ATTACK_SEC, t1)
+    const tR = Math.max(t1 - RELEASE_SEC, tA)
+
+    const osc = ctx.createOscillator()
+    const env = ctx.createGain()
+
+    if (periodicWave) {
+      osc.setPeriodicWave(periodicWave)
+    } else {
+      osc.type = waveform
+    }
+    osc.frequency.value = e.freqHz
+
+    env.gain.setValueAtTime(0, t0)
+    env.gain.linearRampToValueAtTime(e.gainValue, tA)
+    env.gain.setValueAtTime(e.gainValue, tR)
+    env.gain.linearRampToValueAtTime(0, t1)
+
+    osc.connect(env)
+    env.connect(vGains[e.voice])
+    osc.start(t0)
+    osc.stop(t1)
+  }
+
+  const rendered = await ctx.startRendering()
+  return encodeWav(rendered.getChannelData(0), sampleRate, 1)
+}
+
+/**
  * Web Audio API manager.
  *
  * AudioContext is created lazily on the first call to start(), satisfying
