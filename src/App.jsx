@@ -158,6 +158,7 @@ export default function App() {
                 snapshots={state.snapshots}
                 onSnapshotAdd={(s) => dispatch({ type: 'ADD_SNAPSHOT', payload: s })}
                 rhythmSettings={state.rhythmSettings}
+                appState={state}
               />
             )}
           </main>

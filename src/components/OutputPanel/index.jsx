@@ -8,11 +8,12 @@ import PlaybackControls from './PlaybackControls'
 import WaveformSelector from './WaveformSelector'
 import ExportButton from './ExportButton'
 import WavExportButton from './WavExportButton'
+import SettingsExportButton from './SettingsExportButton'
 import ImportButton from './ImportButton'
 
 const BASE_HZ = 72
 
-export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }) {
+export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, appState }) {
   const engineRef        = useRef(null)
   const rafRef           = useRef(null)
   const totalDurationRef = useRef(0)   // ref so rAF closure always reads latest value
@@ -202,6 +203,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings }
             masterGain={masterGain}
             snapshot={selectedSnapshot}
           />
+          <SettingsExportButton appState={appState} />
         </div>
       </div>
 
