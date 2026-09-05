@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { getBestApprox, enumerateJustIntervals, tonnetzPlanes } from '../../utils/edoUtils'
 import { commaToTonnetzPath, commaPathPositions, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
@@ -6,29 +6,45 @@ import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
 const CELL = 32
 const GAP = 2
 const STEP = CELL + GAP
-const MAN_COLS = 15
-const MAN_ROWS = 9
+// Base viewport (no comma, or a comma whose path stays near the origin).
+const BASE_HALF_COLS = 7
+const BASE_HALF_ROWS = 4
+// Hard cap on grid extent so very sprawling comma paths (large EDOs, many hops)
+// still render in a bounded number of SVG cells.
+const MAX_HALF_COLS = 80
+const MAX_HALF_ROWS = 50
+const PATH_MARGIN = 3
+
+const btnClass = [
+  'px-2 py-1 text-xs font-semibold rounded-md',
+  'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+  'hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors',
+].join(' ')
 
 function pitchFill(pc, edo) {
   return `hsl(${(pc / edo) * 360}, 68%, 48%)`
 }
 
-// Returns { cells, hopDep, hopArr } for path rendering in InteractiveTonnetz.
+// Returns { cells, hopDep, hopArr, bbox } for path rendering in InteractiveTonnetz.
 // hopDep: Map 'lx,ly' → { toPC, prime }; hopArr: Set 'lx,ly'
+// bbox: { minLx, maxLx, minLy, maxLy } spanning every cell the path visits.
 function buildPathData(moves, xSteps, ySteps, edo) {
   const cells  = new Set()
   const hopDep = new Map()
   const hopArr = new Set()
-  if (!moves || moves.length === 0) return { cells, hopDep, hopArr }
+  if (!moves || moves.length === 0) return { cells, hopDep, hopArr, bbox: null }
   const positions = commaPathPositions(moves, xSteps, ySteps, edo)
+  let minLx = 0, maxLx = 0, minLy = 0, maxLy = 0
   positions.forEach(pos => {
     cells.add(`${pos.lx},${pos.ly}`)
+    minLx = Math.min(minLx, pos.lx); maxLx = Math.max(maxLx, pos.lx)
+    minLy = Math.min(minLy, pos.ly); maxLy = Math.max(maxLy, pos.ly)
     if (pos.moveType === 'hop') {
       hopDep.set(`${pos.fromLx},${pos.fromLy}`, { toPC: pos.toPC, prime: pos.prime })
       hopArr.add(`${pos.lx},${pos.ly}`)
     }
   })
-  return { cells, hopDep, hopArr }
+  return { cells, hopDep, hopArr, bbox: { minLx, maxLx, minLy, maxLy } }
 }
 
 function computeScaleMetrics(scale, edo) {
@@ -218,33 +234,129 @@ function AutoMode({ edo, primes, defaultGenerator, onSelect }) {
 function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onToggle, planeOffset = 0 }) {
   const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
   const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
+  const [scale, setScale] = useState(1)
+  const [focus, setFocus] = useState({ lx: 0, ly: 0 })
+  const containerRef = useRef(null)
 
   const pathData = useMemo(() => {
-    if (!comma) return { cells: new Set(), hopDep: new Map(), hopArr: new Set() }
+    if (!comma) return { cells: new Set(), hopDep: new Map(), hopArr: new Set(), bbox: null }
     const moves = commaToTonnetzPath(comma.monzo, xInterval, yInterval)
     return buildPathData(moves, xSteps, ySteps, edo)
   }, [comma, xInterval, yInterval, xSteps, ySteps, edo])
+  const { bbox } = pathData
 
-  const originCol = Math.floor(MAN_COLS / 2)
-  const originRow = Math.floor(MAN_ROWS / 2)
-  const svgW = MAN_COLS * STEP - GAP
-  const svgH = MAN_ROWS * STEP - GAP
+  // Grid is large enough to always cover the comma's path (plus a margin),
+  // symmetric around the origin, capped so element count stays bounded.
+  const halfCols = Math.min(MAX_HALF_COLS, bbox
+    ? Math.max(BASE_HALF_COLS, Math.abs(bbox.minLx), Math.abs(bbox.maxLx)) + PATH_MARGIN
+    : BASE_HALF_COLS)
+  const halfRows = Math.min(MAX_HALF_ROWS, bbox
+    ? Math.max(BASE_HALF_ROWS, Math.abs(bbox.minLy), Math.abs(bbox.maxLy)) + PATH_MARGIN
+    : BASE_HALF_ROWS)
+  const COLS = halfCols * 2 + 1
+  const ROWS = halfRows * 2 + 1
+  const CX = Math.floor(COLS / 2)
+  const CY = Math.floor(ROWS / 2)
+  const svgW = COLS * STEP - GAP
+  const svgH = ROWS * STEP - GAP
+
+  const scrollToCell = (lx, ly) => {
+    const el = containerRef.current
+    if (!el) return
+    const col = CX + lx, row = CY - ly
+    const cellCX = (col * STEP + CELL / 2) * scale
+    const cellCY = (row * STEP + CELL / 2) * scale
+    el.scrollLeft = cellCX - el.clientWidth / 2
+    el.scrollTop = cellCY - el.clientHeight / 2
+  }
+
+  function focusOrigin() {
+    setScale(1)
+    setFocus({ lx: 0, ly: 0 })
+  }
+
+  function focusPath() {
+    if (!bbox) { focusOrigin(); return }
+    const el = containerRef.current
+    const bboxWpx = ((bbox.maxLx - bbox.minLx) + 1) * STEP
+    const bboxHpx = ((bbox.maxLy - bbox.minLy) + 1) * STEP
+    const fit = el?.clientWidth
+      ? Math.min(1, (el.clientWidth * 0.9) / bboxWpx, (el.clientHeight * 0.9) / bboxHpx)
+      : 1
+    setScale(Math.max(0.25, parseFloat(fit.toFixed(2))))
+    setFocus({
+      lx: Math.round((bbox.minLx + bbox.maxLx) / 2),
+      ly: Math.round((bbox.minLy + bbox.maxLy) / 2),
+    })
+  }
+
+  // Whenever the comma's path changes (new comma, or a new axis plane), re-focus
+  // and zoom-to-fit on that path — falling back to the origin when there is none.
+  useEffect(() => { focusPath() }, [bbox]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-center on the current focus point whenever zoom or grid size changes.
+  useEffect(() => { scrollToCell(focus.lx, focus.ly) }, [scale, focus, COLS, ROWS]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cells = useMemo(() => {
+    const out = []
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const lx = col - CX
+        const ly = CY - row
+        const pc = ((lx * xSteps + ly * ySteps + planeOffset) % edo + edo) % edo
+        out.push({ col, row, lx, ly, pc, x: col * STEP, y: row * STEP })
+      }
+    }
+    return out
+  }, [COLS, ROWS, CX, CY, xSteps, ySteps, edo, planeOffset])
 
   return (
-    <div className="overflow-x-auto">
-      <svg width={svgW} height={svgH} style={{ display: 'block' }}>
-        {Array.from({ length: MAN_ROWS }, (_, row) =>
-          Array.from({ length: MAN_COLS }, (_, col) => {
-            const lx = col - originCol
-            const ly = originRow - row
-            const pc       = ((lx * xSteps + ly * ySteps + planeOffset) % edo + edo) % edo
+    <div>
+      {/* Controls */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-xs text-slate-500 dark:text-slate-400">Zoom</span>
+        <button
+          className={btnClass}
+          onClick={() => setScale(s => Math.max(0.25, parseFloat((s - 0.25).toFixed(2))))}
+          aria-label="Zoom out"
+        >−</button>
+        <span className="text-xs w-10 text-center text-slate-600 dark:text-slate-400">
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          className={btnClass}
+          onClick={() => setScale(s => Math.min(2, parseFloat((s + 0.25).toFixed(2))))}
+          aria-label="Zoom in"
+        >+</button>
+        <button className={btnClass} onClick={() => setScale(1)}>Reset zoom</button>
+        <button className={btnClass} onClick={focusOrigin}>Center</button>
+        {bbox && (
+          <button className={btnClass} onClick={focusPath}>Focus comma path</button>
+        )}
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {COLS}×{ROWS} cells{bbox ? ' · auto-centered on comma path' : ''}
+        </span>
+      </div>
+
+      {/* Scrollable, zoomable viewport */}
+      <div
+        ref={containerRef}
+        className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-700"
+        style={{ maxHeight: 420 }}
+      >
+        <svg
+          width={svgW * scale}
+          height={svgH * scale}
+          viewBox={`0 0 ${svgW} ${svgH}`}
+          style={{ display: 'block' }}
+        >
+          {cells.map(({ col, row, lx, ly, pc, x, y }) => {
             const cellKey  = `${lx},${ly}`
             const onPath   = pathData.cells.has(cellKey)
             const hopDep   = pathData.hopDep.get(cellKey)
             const isHopArr = pathData.hopArr.has(cellKey)
             const isSelected = selectedPCs.has(pc)
             const isOrigin = lx === 0 && ly === 0
-            const x = col * STEP, y = row * STEP
 
             const borderColor = isSelected ? '#f59e0b'
                               : (hopDep || isHopArr) ? '#ef4444'
@@ -288,9 +400,9 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
                 )}
               </g>
             )
-          })
-        )}
-      </svg>
+          })}
+        </svg>
+      </div>
     </div>
   )
 }
