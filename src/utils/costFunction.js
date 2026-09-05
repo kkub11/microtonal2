@@ -5,7 +5,7 @@ function gcd(a, b) {
 
 // Returns all just ratios p:q in (1:1, 2:1) where p and q are both
 // prime-smooth (composed only of primes in the given set) and ≤ maxPQ.
-function buildRatioList(primes, maxPQ) {
+export function buildRatioList(primes, maxPQ) {
   function isSmooth(n) {
     let m = n
     for (const p of primes) { while (m % p === 0) m = Math.floor(m / p) }
@@ -36,6 +36,19 @@ function buildRatioList(primes, maxPQ) {
   return ratios
 }
 
+// Raw consonance score for one interval against a just-ratio list — higher
+// means more consonant. Shared by computeCostTable and scoreCandidateStep.
+function pairConsonanceScore(intervalCents, ratios, proximityK, power) {
+  let score = 0
+  for (const { cents, tenney } of ratios) {
+    const diff = Math.abs(cents - intervalCents)
+    if (diff < 50) {
+      score += Math.exp(-proximityK * diff) / Math.pow(tenney, power)
+    }
+  }
+  return score
+}
+
 // Builds an N×N Float32Array of interval costs for all scale degree pairs.
 // costTable[i*N + j] = cost of the interval from scale[i] to scale[j].
 // Low cost = consonant; high cost = dissonant.
@@ -54,15 +67,31 @@ export function computeCostTable(scale, edo, primes, { power = 2.0, maxPQ = 20, 
     for (let j = 0; j < N; j++) {
       const intervalCents = ((scale[j] - scale[i] + edo) % edo) * edoStepCents
       if (intervalCents === 0) continue  // unison: cost stays 0.0
-      let score = 0
-      for (const { cents, tenney } of ratios) {
-        const diff = Math.abs(cents - intervalCents)
-        if (diff < 50) {
-          score += Math.exp(-proximityK * diff) / Math.pow(tenney, power)
-        }
-      }
+      const score = pairConsonanceScore(intervalCents, ratios, proximityK, power)
       table[i * N + j] = 1.0 / Math.max(score, 0.001)
     }
   }
   return table
+}
+
+// Average consonance of candidate EDO step `step` (not necessarily already
+// in `scale`) against every note currently in `scale`, using the same
+// ratio-proximity math as computeCostTable. Higher = better fit. Averaging
+// (rather than nearest-neighbor) rewards steps that harmonize broadly with
+// the whole scale, matching computeCostTable's own "sum over many just
+// ratios" philosophy.
+export function scoreCandidateStep(step, scale, edo, primes, costParams = {}) {
+  const { power = 2.0, maxPQ = 20, proximityK = 0.1 } = costParams
+  const ratios = buildRatioList(primes, maxPQ)
+  const edoStepCents = 1200 / edo
+  let total = 0, count = 0
+  for (const member of scale) {
+    if (member === step) continue
+    for (const [a, b] of [[step, member], [member, step]]) {
+      const intervalCents = ((b - a + edo) % edo) * edoStepCents
+      total += pairConsonanceScore(intervalCents, ratios, proximityK, power)
+      count++
+    }
+  }
+  return count === 0 ? 0 : total / count
 }

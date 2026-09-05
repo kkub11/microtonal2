@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { getBestApprox, enumerateJustIntervals, tonnetzPlanes } from '../../utils/edoUtils'
 import { commaToTonnetzPath, commaPathPositions, getCommaProjectionInfo } from '../../utils/commaUtils'
 import { findMOSSizes, buildScaleFromGenerator } from '../../utils/scaleUtils'
+import { scoreCandidateStep, computeCostTable } from '../../utils/costFunction'
 
 const CELL = 32
 const GAP = 2
@@ -85,6 +86,62 @@ function ScaleMetrics({ scale, edo }) {
       <div className="font-mono text-slate-500 dark:text-slate-400">
         Steps: {m.stepCents.map(c => c.toFixed(0) + '¢').join('  ')}
       </div>
+    </div>
+  )
+}
+
+function useScaleSuggestions(scale, edo, primes, costParams) {
+  return useMemo(() => {
+    if (!scale || scale.length === 0) return { toAdd: [], toRemove: [] }
+    const scaleSet = new Set(scale)
+    const toAdd = []
+    for (let step = 0; step < edo; step++) {
+      if (scaleSet.has(step)) continue
+      toAdd.push({ step, score: scoreCandidateStep(step, scale, edo, primes, costParams) })
+    }
+    toAdd.sort((a, b) => b.score - a.score)
+
+    let toRemove = []
+    if (scale.length > 2) {
+      const N = scale.length
+      const table = computeCostTable(scale, edo, primes, costParams)
+      toRemove = scale
+        .map((step, i) => {
+          let total = 0, count = 0
+          for (let j = 0; j < N; j++) {
+            if (j === i) continue
+            total += table[i * N + j] + table[j * N + i]
+            count += 2
+          }
+          return { step, cost: count ? total / count : 0 }
+        })
+        .sort((a, b) => b.cost - a.cost) // highest avg cost = least-contributing
+    }
+    return { toAdd: toAdd.slice(0, 8), toRemove: toRemove.slice(0, 8) }
+  }, [scale, edo, primes, costParams])
+}
+
+function ScaleSuggestions({ scale, edo, primes, costParams, onToggle }) {
+  const { toAdd, toRemove } = useScaleSuggestions(scale, edo, primes, costParams)
+  if (toAdd.length === 0 && toRemove.length === 0) return null
+  return (
+    <div className="text-xs space-y-1.5">
+      {toAdd.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-slate-500 dark:text-slate-400">Good to add:</span>
+          {toAdd.map(({ step }) => (
+            <button key={step} onClick={() => onToggle(step)} className={btnClass}>{step}</button>
+          ))}
+        </div>
+      )}
+      {toRemove.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-slate-500 dark:text-slate-400">Safe to remove:</span>
+          {toRemove.map(({ step }) => (
+            <button key={step} onClick={() => onToggle(step)} className={btnClass}>{step}</button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -407,7 +464,7 @@ function InteractiveTonnetz({ edo, xInterval, yInterval, comma, selectedPCs, onT
   )
 }
 
-function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalChange }) {
+function ManualMode({ edo, primes, xInterval, yInterval, comma, costParams, onSelect, onYIntervalChange }) {
   const [selectedPCs, setSelectedPCs] = useState(new Set())
   const xSteps = getBestApprox(edo, xInterval.ratio[0], xInterval.ratio[1])
   const ySteps = getBestApprox(edo, yInterval.ratio[0], yInterval.ratio[1])
@@ -503,6 +560,7 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalCha
           </p>
           <ScaleRuler scale={scale} edo={edo} />
           <ScaleMetrics scale={scale} edo={edo} />
+          <ScaleSuggestions scale={scale} edo={edo} primes={primes} costParams={costParams} onToggle={togglePC} />
           <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
             [{scale.join(', ')}]
           </p>
@@ -532,7 +590,7 @@ function ManualMode({ edo, xInterval, yInterval, comma, onSelect, onYIntervalCha
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval, scale, onScaleChange, onYIntervalChange }) {
+export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval, scale, costParams, onScaleChange, onYIntervalChange }) {
   const suggestedMode = !comma || nonOctavePrimeCount(comma.monzo) <= 2 ? 'auto' : 'manual'
   const [mode, setMode] = useState(suggestedMode)
 
@@ -580,8 +638,9 @@ export default function ScaleBuilder({ comma, edo, primes, xInterval, yInterval,
       ) : (
         <ManualMode
           key={`manual-${comma?.monzo.join(',') ?? 'none'}-${edo}`}
-          edo={edo} xInterval={xInterval} yInterval={yInterval}
-          comma={comma} onSelect={onScaleChange} onYIntervalChange={onYIntervalChange}
+          edo={edo} primes={primes} xInterval={xInterval} yInterval={yInterval}
+          comma={comma} costParams={costParams}
+          onSelect={onScaleChange} onYIntervalChange={onYIntervalChange}
         />
       )}
     </div>

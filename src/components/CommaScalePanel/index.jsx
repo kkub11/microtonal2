@@ -3,7 +3,7 @@ import CommaDetail from './CommaDetail'
 import ScaleBuilder from './ScaleBuilder'
 
 export default function CommaScalePanel({
-  edo, primes, xInterval, yInterval, selectedComma, scale, onCommaChange, onScaleChange, onYIntervalChange,
+  edo, primes, xInterval, yInterval, selectedComma, scale, costParams, onCommaChange, onScaleChange, onYIntervalChange,
 }) {
   return (
     <div className="space-y-4">
@@ -41,6 +41,7 @@ export default function CommaScalePanel({
           xInterval={xInterval}
           yInterval={yInterval}
           scale={scale}
+          costParams={costParams}
           onScaleChange={onScaleChange}
           onYIntervalChange={onYIntervalChange}
         />
