@@ -202,6 +202,105 @@ export async function renderToWav(noteEvents, options = {}, sampleRate = 44100) 
 }
 
 /**
+ * Peak amplitude of an additive harmonic stack over one period, sampled at 1024
+ * points. Mirrors the implicit peak-normalization ctx.createPeriodicWave() applies
+ * by default, so renderToWavFast's harmonic timbres match renderToWav's loudness.
+ */
+function harmonicsPeak(harmonics) {
+  const RESOLUTION = 1024
+  let peak = 0
+  for (let i = 0; i < RESOLUTION; i++) {
+    const phase = (2 * Math.PI * i) / RESOLUTION
+    let v = 0
+    for (let h = 0; h < harmonics.length; h++) v += harmonics[h] * Math.sin(phase * (h + 1))
+    if (Math.abs(v) > peak) peak = Math.abs(v)
+  }
+  return peak || 1
+}
+
+/**
+ * Render note events to a WAV Blob by summing each note's envelope + waveform
+ * directly into a plain Float32Array — no Web Audio node graph at all.
+ *
+ * This scales with total audio samples produced (like CSound's additive scoring
+ * engine), not with (render quanta × live node count), so it stays fast on long
+ * pieces where renderToWav's OfflineAudioContext graph gets slow.
+ *
+ * Trade-off: 'triangle'/'sawtooth'/'square' use naive (non-band-limited) formulas,
+ * so they alias more than the browser's OscillatorNode at high frequencies.
+ * 'sine' and the harmonic (f1–f7) presets are pure additive synthesis and match
+ * renderToWav's output closely.
+ *
+ * @param {object[]} noteEvents   Output of buildNoteEvents
+ * @param {object}   [options]    Same shape as renderToWav's options
+ * @param {number}   [sampleRate=44100]
+ * @returns {Promise<Blob>}
+ */
+export async function renderToWavFast(noteEvents, options = {}, sampleRate = 44100) {
+  const {
+    waveform   = 'sine',
+    harmonics  = null,
+    voiceGains = [],
+    masterGain = 0.5,
+  } = options
+
+  const totalDuration = noteEvents.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
+  if (totalDuration <= 0) throw new Error('No note events to render')
+
+  const lengthSamples = Math.ceil((totalDuration + 0.1) * sampleRate)
+  const output         = new Float32Array(lengthSamples)
+  const harmonicsGain  = harmonics ? 1 / harmonicsPeak(harmonics) : 1
+
+  for (const e of noteEvents) {
+    if (e.isRest || !(e.freqHz > 0) || e.durationSec <= 0) continue
+    const t0 = e.startSec
+    const t1 = t0 + e.durationSec
+    const tA = Math.min(t0 + ATTACK_SEC, t1)
+    const tR = Math.max(t1 - RELEASE_SEC, tA)
+    const amp = e.gainValue * (voiceGains[e.voice] ?? 1.0) * masterGain
+
+    const sampleStart = Math.max(0, Math.floor(t0 * sampleRate))
+    const sampleEnd    = Math.min(lengthSamples, Math.ceil(t1 * sampleRate))
+
+    for (let n = sampleStart; n < sampleEnd; n++) {
+      const t = n / sampleRate
+
+      let env
+      if (t < tA)       env = tA > t0 ? (t - t0) / (tA - t0) : 1
+      else if (t <= tR) env = 1
+      else              env = tR < t1 ? Math.max(0, (t1 - t) / (t1 - tR)) : 0
+      if (env <= 0) continue
+
+      const phase = 2 * Math.PI * e.freqHz * (t - t0)
+      let v
+      if (harmonics) {
+        v = 0
+        for (let h = 0; h < harmonics.length; h++) {
+          const a = harmonics[h]
+          if (a) v += a * Math.sin(phase * (h + 1))
+        }
+        v *= harmonicsGain
+      } else if (waveform === 'triangle') {
+        v = (2 / Math.PI) * Math.asin(Math.sin(phase))
+      } else if (waveform === 'sawtooth') {
+        // Web Audio's sawtooth is phase-centered: rises through 0 at phase=0,
+        // reaches ±1 at phase=±π, wrapping there instead of at phase=0.
+        const wrapped = ((phase + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI
+        v = wrapped / Math.PI
+      } else if (waveform === 'square') {
+        v = Math.sin(phase) >= 0 ? 1 : -1
+      } else {
+        v = Math.sin(phase)
+      }
+
+      output[n] += amp * env * v
+    }
+  }
+
+  return encodeWav(output, sampleRate, 1)
+}
+
+/**
  * Web Audio API manager.
  *
  * AudioContext is created lazily on the first call to start(), satisfying

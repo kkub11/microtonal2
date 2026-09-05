@@ -190,7 +190,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
       {/* Header row */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-semibold">Output</h2>
-        <div className="flex gap-2">
+        <div className="flex items-start gap-2">
           <ImportButton onImport={handleImport} />
           <ExportButton
             snapshot={selectedSnapshot}
