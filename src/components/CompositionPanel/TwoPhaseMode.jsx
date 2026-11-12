@@ -8,11 +8,16 @@
 export default function TwoPhaseMode({
   enabled, onToggle,
   phase, tTransition,
-  commaName, seedSource,
+  commaName, seedSource, motifName,
   isRunning,
   onStartPhase2, onSetTransitionHere,
 }) {
   const fmtT = t => (t >= 10 ? `${Math.round(t)}` : t.toFixed(1))
+  const seedLabel = seedSource === 'motif'
+    ? `the motif (${motifName})`
+    : seedSource === 'traversal'
+      ? `the ${commaName} traversal`
+      : 'the scale itself'
 
   return (
     <div className="space-y-3">
@@ -39,11 +44,21 @@ export default function TwoPhaseMode({
 
       {enabled && (
         <div className="space-y-3 pl-6">
+          {motifName && (
+            <p className="text-xs text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 rounded-md px-2.5 py-2">
+              Your motif ({motifName}) is on, so Phase 2 will be seeded from the motif
+              instead of the comma traversal. Phase 1 still starts from random.
+              Turn the motif off and Phase 2 goes back to the traversal.
+            </p>
+          )}
+
           {phase === 'idle' && (
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              {commaName
-                ? `Phase 2 will seed from the ${commaName} traversal.`
-                : 'No comma selected — Phase 2 will seed from the scale itself. Pick a comma in Step 3 to seed from its traversal instead.'}
+              {seedSource === 'motif'
+                ? `Phase 2 will seed from the motif (${motifName}).`
+                : commaName
+                  ? `Phase 2 will seed from the ${commaName} traversal.`
+                  : 'No comma selected — Phase 2 will seed from the scale itself. Pick a comma in Step 3 to seed from its traversal instead.'}
               {' '}Phase 1 always starts from random, so motif seeding is ignored in Phase 1.
             </p>
           )}
@@ -74,11 +89,7 @@ export default function TwoPhaseMode({
             <div className="space-y-2">
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Transition found at T≈{fmtT(tTransition)} — a snapshot was saved at that
-                temperature. Phase 2 will restart from the{' '}
-                {seedSource === 'traversal'
-                  ? `${commaName} traversal`
-                  : 'scale itself'}{' '}
-                at T≈{fmtT(tTransition)}, fixed.
+                temperature. Phase 2 will restart from {seedLabel} at T≈{fmtT(tTransition)}, fixed.
               </p>
               <button
                 onClick={onStartPhase2}
@@ -91,8 +102,7 @@ export default function TwoPhaseMode({
 
           {phase === 'phase2' && tTransition != null && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Phase 2 — running at fixed T≈{fmtT(tTransition)}, seeded from the{' '}
-              {seedSource === 'traversal' ? `${commaName} traversal` : 'scale itself'}.
+              Phase 2 — running at fixed T≈{fmtT(tTransition)}, seeded from {seedLabel}.
               The seed stays in the piece while the rest anneals around it.
             </p>
           )}

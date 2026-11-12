@@ -3,7 +3,7 @@ import ArrayShapeSelector from './ArrayShapeSelector'
 import VoiceCountSelector from './VoiceCountSelector'
 import WeightSliders from './WeightSliders'
 import MotifSeeding from './MotifSeeding'
-import { resolveMotif } from '../../utils/motifUtils'
+import { resolveMotif, getPresetMotif } from '../../utils/motifUtils'
 import TwoPhaseMode from './TwoPhaseMode'
 import { traversalToDegrees, scaleCycleDegrees, detectTransition } from '../../utils/twoPhaseUtils'
 import { getCommaName } from '../../utils/commaUtils'
@@ -66,11 +66,22 @@ export default function CompositionPanel({
   const phaseHistoryRef               = useRef([]) // [{ temperature, cost }]
   const setPhaseBoth = p => { phaseRef.current = p; setPhase(p) }
 
-  // What Phase 2 would seed from (recomputed when the comma/scale changes):
-  // the comma traversal when a comma is selected, else the scale itself.
+  // What Phase 2 would seed from (recomputed when the motif/comma/scale
+  // changes). Precedence — the user decides in the interface:
+  //   1. the motif, when motif seeding is on (the user chose a phrase);
+  //   2. the comma traversal, when a comma is selected in Step 3;
+  //   3. the scale itself, cycled.
+  // The motif is planted transposed per voice (its normal behaviour);
+  // the traversal / scale seeds are planted untransposed.
+  const phase2Motif = resolveMotif(motif)
   const phase2Traversal = traversalToDegrees(selectedComma, scale, edo, xInterval, yInterval)
-  const phase2Seed = phase2Traversal ?? scaleCycleDegrees(scale)
-  const phase2SeedSource = phase2Traversal != null ? 'traversal' : 'scale'
+  const phase2Seed = phase2Motif ?? phase2Traversal ?? scaleCycleDegrees(scale)
+  const phase2SeedSource = phase2Motif != null ? 'motif'
+    : phase2Traversal != null ? 'traversal' : 'scale'
+  const phase2Transpose = phase2SeedSource === 'motif'
+  const motifName = motif?.enabled
+    ? (motif.source === 'preset' ? (getPresetMotif(motif.presetId)?.name ?? 'your motif') : 'your custom motif')
+    : null
 
   // Called when the transition temperature is fixed (detected knuckle or
   // manual "set transition here"): snapshot at that temperature, pause,
@@ -289,13 +300,13 @@ export default function CompositionPanel({
 
   function handleStartPhase2() {
     if (tTransition == null) return
-    // Phase 2: restart from the traversal seed (or the scale itself when
-    // no comma is selected) at the fixed transition temperature. The
-    // seed is planted untransposed and pinned, so it stays in the piece.
+    // Phase 2: restart from the seed (motif > comma traversal > scale)
+    // at the fixed transition temperature. The seed is planted and
+    // pinned, so it stays in the piece.
     setTemp(tTransition)
     setAutoCool(false)
     setPhaseBoth('phase2')
-    startWorker({ initMotif: phase2Seed, motifTranspose: false, temperature: tTransition })
+    startWorker({ initMotif: phase2Seed, motifTranspose: phase2Transpose, temperature: tTransition })
   }
 
   function handleSetTransitionHere() {
@@ -407,6 +418,7 @@ export default function CompositionPanel({
               tTransition={tTransition}
               commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
               seedSource={phase2SeedSource}
+              motifName={motifName}
               isRunning={status === 'running'}
               onStartPhase2={handleStartPhase2}
               onSetTransitionHere={handleSetTransitionHere}

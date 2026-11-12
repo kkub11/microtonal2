@@ -364,13 +364,28 @@ repeats to ~70% and entropy down to ~1.6; 5.0 freezes the piece.
 Default 0.5. Note: with either weight high, cooling below ~T10
 collapses to repeats — snapshot around T15–30 instead.
 
-Jim's fuller Term 4 design (not yet implemented — it needs phrase
-repetition structure the score array doesn't track): when the same
-position appears in two different phrase repetitions, the melodic
-interval leading into it should match between repetitions.
+Jim's fuller Term 4 design (IMPLEMENTED 2026-11-12, branch
+`musicality-fixes`, behind the "Transposed phrase matching" checkbox
+next to the Thematic slider, off by default): when the same position
+appears in two different phrase repetitions, the melodic interval
+leading into it should match between repetitions.
   expectedPitch = b1 + (a2 - a1)   // transpose snippet A's interval to B
   cost += thematicWeight * costTable[p * N + expectedPitch]
-Encodes melodic shape preservation across phrase variations.
+Encodes melodic shape preservation across phrase variations. The
+substrate is the same long-range hypercube neighbours as the simple
+rule (the same position in a different section); the "interval leading
+into" a note is the step from its sequential predecessor, and the
+expected pitch is the partner's step applied to that predecessor,
+wrapped mod N. Degree differences are raw (as in the jump term), not
+shortest-wrapped. The cost is directed, so computeTotalCost sums both
+directions of each long-range edge (unlike the symmetric simple rule,
+which counts each edge once). Measured 2026-11-12 (exp14, 53-EDO MOS7,
+T20, 3-seed): transposed-match rate (chance ≈ 14%) is 14.4% with the
+term off, 16.2% at thematic 0.5 and 17.7% at 2.0 with an Ode to Joy
+motif planted; 17.2% off vs 22.9% at 2.0 with no motif — the rule works
+and the effect grows with weight, but it is subtle at the default 0.5
+(the checkbox note says to raise the slider). Entropy/repeats barely
+move at 0.5, so the piece's character is unchanged.
 
 **History — why the Jump/Thematic sliders did nothing (found 2026-11-12):**
 the terms were specified in NOTES.md from the very first commit
@@ -479,6 +494,18 @@ documented because they change the behaviour:
   per voice (start + halfway, untransposed) instead of cycling it
   across the whole array. The worker's `initMode: 'seed'` cycle-fill
   path remains unused by the UI.
+- **Motif + Two-Phase composition (2026-11-12, Kanon's call — the user
+  decides in the interface, the options are not mutually exclusive):**
+  the Phase 2 seed precedence is motif (when motif seeding is on) >
+  comma traversal (when a comma is selected) > scale itself. When both
+  are on, the Two-Phase card shows a note: "Your motif (X) is on, so
+  Phase 2 will be seeded from the motif instead of the comma
+  traversal. Phase 1 still starts from random. Turn the motif off and
+  Phase 2 goes back to the traversal." The motif is planted transposed
+  per voice (its normal behaviour); traversal/scale seeds are planted
+  untransposed. Turning the motif on mid-run still plants it live
+  (SET_MOTIF), which now coheres with the precedence — the motif wins
+  whenever it is on.
 
 **The energy graph (cost vs temperature) — what to look for:**
 The log plot from Jim's 270-EDO piece (reference/270edo_scale_16_log.jpg)
