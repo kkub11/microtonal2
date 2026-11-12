@@ -452,6 +452,34 @@ The app should offer a "Two-Phase Mode" button in the CompositionPanel
 that guides the user through these two phases, automatically recording
 T_transition from Phase 1 and pre-filling it for Phase 2.
 
+**IMPLEMENTED 2026-11-12 (branch `musicality-fixes`, off by default):**
+`TwoPhaseMode.jsx` + `twoPhaseUtils.js`. Phase 1 starts at T200 with
+auto-cool on and random init (the motif is ignored); a knuckle detector
+(`detectTransition`, log-T-binned median costs, steepest cost drop per
+log-T) watches the PROGRESS stream and, when it fires, auto-snapshots
+at that temperature, pauses, and offers "Start Phase 2". A "Set
+transition here" button covers the case where the detector stays
+silent. Phase 2 restarts the worker at fixed T_transition with the
+comma traversal (or the scale itself when no comma is selected) planted
+as the seed. Three measured deviations from the design above, all
+documented because they change the behaviour:
+- The knuckle in 53-EDO MOS7 is a gentle knee, not Jim's sharp drop
+  (cost falls smoothly from ~8k at T165 to ~2.9k at T3). The detector
+  therefore *proposes* a transition (the steepest drop it has seen —
+  T≈26 in an offline run, T≈55 in a live browser run) and the user
+  confirms it; it is a guide, not an oracle.
+- **The seed is NOT preserved without pinning.** Measured 2026-11-12
+  (exp13): a traversal-seeded array run at fixed T keeps only
+  ~13–20% of its seed positions after 100k iterations — chance level
+  (1/7) — at every fixed temperature tested (T20–T150). So Phase 2
+  pins the seed, exactly as motif seeding does; without pinning the
+  feature would be a placebo.
+- Full-array cycling plus pinning would freeze the piece (every
+  position pinned), so Phase 2 plants the traversal at two anchors
+  per voice (start + halfway, untransposed) instead of cycling it
+  across the whole array. The worker's `initMode: 'seed'` cycle-fill
+  path remains unused by the UI.
+
 **The energy graph (cost vs temperature) — what to look for:**
 The log plot from Jim's 270-EDO piece (reference/270edo_scale_16_log.jpg)
 shows the canonical shape. Key features:

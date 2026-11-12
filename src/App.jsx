@@ -47,6 +47,10 @@ const initialState = {
   // presetId, customDegrees } — degrees are scale degrees, so the motif
   // follows whatever scale is built
   motif: { enabled: false, source: 'preset', presetId: 'beethoven5', customDegrees: [] },
+  // two-phase mode (off by default): Phase 1 cools from random to find
+  // the transition temperature; Phase 2 restarts from the comma
+  // traversal seed at that temperature. Off = the usual single run.
+  twoPhase: { enabled: false },
   rhythmSettings: {
     mode:              'simple',  // 'simple' | 'full'
     measureSec:        5.0,
@@ -84,6 +88,7 @@ function reducer(state, action) {
     case 'SET_CUBE_DIMS':      return { ...state, cubeDims: action.payload }
     case 'SET_WEIGHTS':        return { ...state, weights: action.payload }
     case 'SET_MOTIF':          return { ...state, motif: action.payload }
+    case 'SET_TWO_PHASE':      return { ...state, twoPhase: action.payload }
     case 'SET_RHYTHM_SETTINGS': return { ...state, rhythmSettings: action.payload }
     case 'ADD_SNAPSHOT':       return { ...state, snapshots: [...state.snapshots, action.payload] }
     default:                 return state
@@ -151,6 +156,11 @@ export default function App() {
                 onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
                 motif={state.motif}
                 onMotifChange={(m) => dispatch({ type: 'SET_MOTIF', payload: m })}
+                twoPhase={state.twoPhase}
+                onTwoPhaseChange={(t) => dispatch({ type: 'SET_TWO_PHASE', payload: t })}
+                selectedComma={state.selectedComma}
+                xInterval={state.xInterval}
+                yInterval={state.yInterval}
                 rhythmSettings={state.rhythmSettings}
                 onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
                 snapshots={state.snapshots}

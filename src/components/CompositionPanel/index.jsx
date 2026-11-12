@@ -4,6 +4,9 @@ import VoiceCountSelector from './VoiceCountSelector'
 import WeightSliders from './WeightSliders'
 import MotifSeeding from './MotifSeeding'
 import { resolveMotif } from '../../utils/motifUtils'
+import TwoPhaseMode from './TwoPhaseMode'
+import { traversalToDegrees, scaleCycleDegrees, detectTransition } from '../../utils/twoPhaseUtils'
+import { getCommaName } from '../../utils/commaUtils'
 import RhythmSettings from './RhythmSettings'
 import TemperatureSlider from './TemperatureSlider'
 import EnergyDisplay, { N_ENERGY_BUCKETS, tempToBucket } from './EnergyDisplay'
@@ -28,6 +31,8 @@ export default function CompositionPanel({
   cubeDims, onCubeDimsChange,
   weights, onWeightsChange,
   motif, onMotifChange,
+  twoPhase, onTwoPhaseChange,
+  selectedComma, xInterval, yInterval,
   rhythmSettings, onRhythmSettingsChange,
   snapshots, onSnapshotAdd,
 }) {
@@ -51,6 +56,36 @@ export default function CompositionPanel({
   const [previewOn,       setPreviewOn]       = useState(true)
   const [previewWaveform, setPreviewWaveform] = useState('sine')
   const [previewGain,     setPreviewGain]     = useState(0.7)
+
+  // Two-Phase Mode progress (runtime state; the enabled toggle lives in App).
+  // phase: 'idle' | 'phase1' (cooling to find the transition) |
+  //        'awaiting' (knuckle found, paused, ready for Phase 2) | 'phase2'
+  const [phase, setPhase]             = useState('idle')
+  const phaseRef                      = useRef('idle')
+  const [tTransition, setTTransition] = useState(null)
+  const phaseHistoryRef               = useRef([]) // [{ temperature, cost }]
+  const setPhaseBoth = p => { phaseRef.current = p; setPhase(p) }
+
+  // What Phase 2 would seed from (recomputed when the comma/scale changes):
+  // the comma traversal when a comma is selected, else the scale itself.
+  const phase2Traversal = traversalToDegrees(selectedComma, scale, edo, xInterval, yInterval)
+  const phase2Seed = phase2Traversal ?? scaleCycleDegrees(scale)
+  const phase2SeedSource = phase2Traversal != null ? 'traversal' : 'scale'
+
+  // Called when the transition temperature is fixed (detected knuckle or
+  // manual "set transition here"): snapshot at that temperature, pause,
+  // and wait for the user to start Phase 2. Uses only refs + stable
+  // setters, so it is safe to call from the (possibly stale) worker
+  // message handler.
+  const transitionFound = useCallback(t => {
+    setTTransition(t)
+    phaseRef.current = 'awaiting'
+    setPhase('awaiting')
+    setAutoCool(false)
+    workerRef.current?.postMessage({ type: 'SNAPSHOT' })
+    workerRef.current?.postMessage({ type: 'PAUSE' })
+    setStatus('paused')
+  }, [])
 
   const ready = scale && scale.length > 0 && costTable
 
@@ -94,6 +129,14 @@ export default function CompositionPanel({
         next[bi] = { temperature: data.temperature, cost: data.totalCost }
         return next
       })
+      // Two-Phase Mode, Phase 1: watch the cost curve for the knuckle.
+      if (phaseRef.current === 'phase1' && data.totalCost != null) {
+        const h = phaseHistoryRef.current
+        h.push({ temperature: data.temperature, cost: data.totalCost })
+        if (h.length > 300) h.shift()
+        const t = detectTransition(h)
+        if (t != null) transitionFound(t)
+      }
       if (data.scoreArray) {
         latestScoreRef.current = { scoreArray: data.scoreArray, scoreShape: data.scoreShape }
         const counts = new Array(scale.length).fill(0)
@@ -117,7 +160,7 @@ export default function CompositionPanel({
         voiceSettings: voiceSettingsRef.current ?? [],
       })
     }
-  }, [onSnapshotAdd, scale, edo])
+  }, [onSnapshotAdd, scale, edo, transitionFound])
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -192,8 +235,8 @@ export default function CompositionPanel({
   }
 
   // ─── Controls ───────────────────────────────────────────────────────────────
-  function handleStart() {
-    if (!ready) return
+  // Shared worker startup (normal runs and both two-phase phases).
+  function startWorker({ initMotif, motifTranspose, temperature: startTemp }) {
     workerRef.current?.terminate()
 
     const w = new Worker(
@@ -210,8 +253,9 @@ export default function CompositionPanel({
       N:             scale.length,
       voiceSettings: translateVoiceSettings(voiceSettings),
       weights,
-      motif: resolveMotif(motif),
-      temperature,
+      motif:         initMotif ?? null,
+      motifTranspose: motifTranspose ?? true,
+      temperature:   startTemp,
     })
 
     if (!audioRef.current) audioRef.current = new AudioEngineClass()
@@ -224,6 +268,38 @@ export default function CompositionPanel({
     setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
     setProgress({ totalCost: null, iteration: 0 })
+  }
+
+  function handleStart() {
+    if (!ready) return
+    if (twoPhase?.enabled) {
+      // Phase 1: random init (NOT the motif, NOT the traversal seed),
+      // cool slowly from T200 while the knuckle detector watches.
+      setTemp(200)
+      setAutoCool(true)
+      setTTransition(null)
+      phaseHistoryRef.current = []
+      setPhaseBoth('phase1')
+      startWorker({ initMotif: null, motifTranspose: true, temperature: 200 })
+    } else {
+      setPhaseBoth('idle')
+      startWorker({ initMotif: resolveMotif(motif), motifTranspose: true, temperature })
+    }
+  }
+
+  function handleStartPhase2() {
+    if (tTransition == null) return
+    // Phase 2: restart from the traversal seed (or the scale itself when
+    // no comma is selected) at the fixed transition temperature. The
+    // seed is planted untransposed and pinned, so it stays in the piece.
+    setTemp(tTransition)
+    setAutoCool(false)
+    setPhaseBoth('phase2')
+    startWorker({ initMotif: phase2Seed, motifTranspose: false, temperature: tTransition })
+  }
+
+  function handleSetTransitionHere() {
+    if (phaseRef.current === 'phase1') transitionFound(temperature)
   }
 
   function handlePauseResume() {
@@ -245,6 +321,9 @@ export default function CompositionPanel({
     setProgress({ totalCost: null, iteration: 0 })
     setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
+    setPhaseBoth('idle')
+    setTTransition(null)
+    phaseHistoryRef.current = []
   }
 
   function handleTemperature(T) {
@@ -260,6 +339,15 @@ export default function CompositionPanel({
   function handleMotif(m) {
     onMotifChange(m)
     workerRef.current?.postMessage({ type: 'SET_MOTIF', value: resolveMotif(m) })
+  }
+
+  function handleTwoPhaseToggle(enabled) {
+    onTwoPhaseChange({ enabled })
+    if (!enabled) {
+      // Guided flow stops; a running worker keeps going as a normal run.
+      setPhaseBoth('idle')
+      setTTransition(null)
+    }
   }
 
   function handleSnapshot() {
@@ -306,6 +394,23 @@ export default function CompositionPanel({
               Motif Seeding
             </label>
             <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
+          </div>
+
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              Two-Phase Mode
+            </label>
+            <TwoPhaseMode
+              enabled={twoPhase?.enabled ?? false}
+              onToggle={handleTwoPhaseToggle}
+              phase={phase}
+              tTransition={tTransition}
+              commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
+              seedSource={phase2SeedSource}
+              isRunning={status === 'running'}
+              onStartPhase2={handleStartPhase2}
+              onSetTransitionHere={handleSetTransitionHere}
+            />
           </div>
 
           <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">

@@ -131,6 +131,15 @@ describe('seedScoreWithMotif', () => {
     expect(pinned.size).toBe(0)
   })
 
+  test('transposePerVoice: false plants the same degrees in every voice', () => {
+    const shape = [3, 4, 4, 4]
+    const arr = new Int16Array(3 * 64).fill(9)
+    seedScoreWithMotif(arr, shape, [0, 4, 1], 7, null, { transposePerVoice: false })
+    expect([...arr.slice(0, 3)]).toEqual([0, 4, 1])
+    expect([...arr.slice(64, 67)]).toEqual([0, 4, 1])
+    expect([...arr.slice(128, 131)]).toEqual([0, 4, 1])
+  })
+
   test('does not write outside the array', () => {
     const shape = [2, 2, 2] // total 8, voice length 4
     const arr = new Int16Array(8).fill(9)

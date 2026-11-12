@@ -87,10 +87,12 @@ export function normalizeDegrees(degrees, N) {
 /**
  * Plant a motif into a flat score array.
  * shape is [voices, d1, d2, ...]; within a voice, playback runs along
- * the flattened slice in order. Each voice gets the motif transposed by
- * 2 scale degrees per voice (harmonising in thirds), planted at the
- * start of its sequence and once more halfway through when it fits, so
- * the thematic term has a second copy to match against.
+ * the flattened slice in order. Each voice gets the motif planted at
+ * the start of its sequence and once more halfway through when it fits,
+ * so the thematic term has a second copy to match against. By default
+ * each voice is transposed by 2 scale degrees per voice (harmonising
+ * in thirds); pass { transposePerVoice: false } to plant the same
+ * degrees in every voice (used by Two-Phase Mode's traversal seed).
  *
  * Planted positions are also added to `pinned` (a Set, when given).
  * Annealing must never resample a pinned position: without pinning, a
@@ -100,7 +102,7 @@ export function normalizeDegrees(degrees, N) {
  * actually stay in the piece — the rest of the score anneals around it.
  * @returns {number} positions written
  */
-export function seedScoreWithMotif(scoreArray, shape, motifDegrees, N, pinned = null) {
+export function seedScoreWithMotif(scoreArray, shape, motifDegrees, N, pinned = null, { transposePerVoice = true } = {}) {
   const motif = normalizeDegrees(motifDegrees, N)
   if (motif.length === 0 || !shape || shape.length === 0 || N <= 0) return 0
   const total = shape.reduce((a, b) => a * b, 1)
@@ -118,7 +120,7 @@ export function seedScoreWithMotif(scoreArray, shape, motifDegrees, N, pinned = 
   }
   for (let v = 0; v < voiceCount; v++) {
     const base = v * voiceLen
-    const shift = (v * 2) % N
+    const shift = transposePerVoice ? (v * 2) % N : 0
     const degrees = motif.map(d => (d + shift) % N)
     plant(base, degrees)
     const half = base + Math.floor(voiceLen / 2)

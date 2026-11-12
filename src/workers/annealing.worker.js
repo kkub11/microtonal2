@@ -42,6 +42,7 @@ self.onmessage = ({ data }) => {
       // resamples them, so the tune stays in the piece.
       if (s) {
         s.motif = data.value ?? null
+        s.motifTranspose = true // live motif changes always transpose per voice
         s.pinned = new Set()
         if (s.motif && s.motif.length > 0) {
           seedScoreWithMotif(s.scoreArray, s.shape, s.motif, s.N, s.pinned)
@@ -68,6 +69,7 @@ function init(data) {
     voiceSettings: data.voiceSettings ?? [],
     weights:       data.weights ?? { rangeWeight: 1.0 },
     motif:         data.motif ?? null,   // scale-degree list, or null = no seeding
+    motifTranspose: data.motifTranspose ?? true, // false: same degrees in every voice (Phase 2)
     pinned:        new Set(),            // score positions holding the motif (never resampled)
     temperature:   data.temperature ?? 200,
     paused:        false,
@@ -98,7 +100,7 @@ function reset(initMode, seed) {
   // them, otherwise the motif is forgotten within ~20k iterations.
   s.pinned = new Set()
   if (s.motif && s.motif.length > 0) {
-    seedScoreWithMotif(scoreArray, s.shape, s.motif, N, s.pinned)
+    seedScoreWithMotif(scoreArray, s.shape, s.motif, N, s.pinned, { transposePerVoice: s.motifTranspose })
   }
 
   s.iteration = 0
