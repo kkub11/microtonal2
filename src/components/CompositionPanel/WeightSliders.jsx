@@ -33,12 +33,12 @@ export default function WeightSliders({ weights, onChange }) {
         label="Jump weight"
         hint="melodic leap penalty"
         value={weights.jumpWeight}
-        max={5}
+        max={10}
         onChange={set('jumpWeight')}
       />
       <Slider
         label="Thematic weight"
-        hint="phrase similarity"
+        hint="long-range phrase match"
         value={weights.thematicWeight}
         max={5}
         onChange={set('thematicWeight')}

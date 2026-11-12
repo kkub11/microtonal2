@@ -290,9 +290,27 @@ Floor ensures no interval ever gets score zero.
 **Step 6: Invert to cost**
   cost[i][j] = 1.0 / score[i][j]
 
+**Step 6b: Unison floor**
+  cost[i][i] = min over i≠j of cost[i][j]
+A zero diagonal made a single repeated pitch the global optimum — cold
+annealing collapsed to a drone. Flooring unison at the cheapest
+consonant interval makes repeating a note exactly as cheap as the best
+fifth/third, no cheaper. Note the floor alone does not stop collapse
+under the old defaults (power 2.0 / maxPQ 20): the cost range is so
+extreme (up to 1000) that at low T any non-perfect interval is
+forbidden and unison is still the only assignment that tiles the cube
+consistently. It is the combination of the floor with the softer
+defaults below that moves the collapse down to ~T10.
+
 **Step 7: Validate range**
 Display computed min/max. Let user adjust power and maxPQ until
 the range is approximately 0.1 to 10.
+The shipped defaults (power 1.0, maxPQ 100) give ~2.5–32 for 53-EDO
+MOS7 — still above the 0.1–10 target, but an order of magnitude closer
+than the old defaults (0–1000), and the interesting temperature now
+sits at ~T15–50 instead of ~T50–200. Pushing power down toward 0.5
+would hit 0.1–10 but flattens the consonance contrast too far to be
+useful; the target is guidance, not a hard rule.
 
 **User-adjustable parameters:**
   power      (slider 0.5–4.0): spreads score range
@@ -314,14 +332,38 @@ Main musical term. All neighbors in all dimensions should be consonant.
   cost += rangeWeight * (p - voiceCenter)^2
 Keeps voices from drifting too far from their center pitch.
 
-**Term 3: Melodic jump cost**
-  cost += jumpWeight * stepDistance(p, prevPitch) * costTable[p][prevPitch]
-Penalizes large leaps, but modulated by consonance — a consonant
-octave leap can be preferred over a dissonant half-step.
+**Term 3: Melodic jump cost** (implemented; the Jump slider in Step 5
+now actually does something — previously annealing read only rangeWeight)
+  cost += jumpWeight * |p - prevPitch| + jumpWeight * |p - nextPitch|
+where prev/next are the note's predecessor and successor in playback
+order within its voice (wrapping, since playback is cyclic). Linear in
+scale degrees: a leap of 3 costs 3× a step of 1. Jim's original sketch
+modulated this by the interval cost
+(`jumpWeight * stepDistance * costTable[p][prevPitch]`, so a consonant
+octave leap could beat a dissonant half-step); the linear form was
+chosen as the first implementation because its effect is directly
+measurable. Measured on 53-EDO MOS7 at T20 (3-seed averages): jump 5.0
+cuts large leaps (≥3 scale degrees) from ~52% to ~35% with entropy
+still ~2.0; jump 10 halves them again but repeats half the notes; jump
+20 freezes the line into repeats. Default 5.0, slider range 0–10.
 
-**Term 4: Thematic similarity cost**
-When the same position appears in two different phrase repetitions,
-the melodic interval leading into it should match between repetitions.
+**Term 4: Thematic similarity cost** (implemented as a first step toward
+Jim's phrase-matching design below)
+  cost += thematicWeight for each long-range hypercube neighbour (dims
+other than the voice dim and the sequential last dim) whose pitch
+differs from p.
+It rewards a note for matching the notes a section away, i.e. motif
+repetition across the cube, beyond what the interval cost already
+rewards. It is a no-op for shapes with no such dim (e.g. [voices, d]).
+Measured: thematic 0.5 is a light nudge; 2.0+ with jump 10 pushes
+repeats to ~70% and entropy down to ~1.6; 5.0 freezes the piece.
+Default 0.5. Note: with either weight high, cooling below ~T10
+collapses to repeats — snapshot around T15–30 instead.
+
+Jim's fuller Term 4 design (not yet implemented — it needs phrase
+repetition structure the score array doesn't track): when the same
+position appears in two different phrase repetitions, the melodic
+interval leading into it should match between repetitions.
   expectedPitch = b1 + (a2 - a1)   // transpose snippet A's interval to B
   cost += thematicWeight * costTable[p * N + expectedPitch]
 Encodes melodic shape preservation across phrase variations.

@@ -14,10 +14,18 @@ describe('computeCostTable', () => {
     expect(t.length).toBe(N * N)
   })
 
-  it('diagonal (unison) entries have cost 0', () => {
+  it('diagonal (unison) entries equal the cheapest non-unison cost', () => {
     const t = computeCostTable(scale, edo, primes)
+    let minOff = Infinity
     for (let i = 0; i < N; i++) {
-      expect(t[i * N + i]).toBe(0)
+      for (let j = 0; j < N; j++) {
+        if (i !== j) minOff = Math.min(minOff, t[i * N + j])
+      }
+    }
+    // Unison is exactly as cheap as the best consonant interval — no
+    // cheaper, so a single repeated pitch is no longer the unique optimum.
+    for (let i = 0; i < N; i++) {
+      expect(t[i * N + i]).toBeCloseTo(minOff, 5)
     }
   })
 
@@ -27,12 +35,11 @@ describe('computeCostTable', () => {
     expect(t[0 * N + 2]).toBeLessThan(t[0 * N + 1])
   })
 
-  it('all non-unison entries are positive', () => {
+  it('all entries are positive', () => {
     const t = computeCostTable(scale, edo, primes)
     for (let i = 0; i < N; i++) {
       for (let j = 0; j < N; j++) {
-        if (i === j) expect(t[i * N + j]).toBe(0)
-        else expect(t[i * N + j]).toBeGreaterThan(0)
+        expect(t[i * N + j]).toBeGreaterThan(0)
       }
     }
   })

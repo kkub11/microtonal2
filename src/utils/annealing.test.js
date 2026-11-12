@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   computeStrides,
   getNeighborIndices,
+  getSequentialNeighbors,
   computeNoteCost,
   computeTotalCost,
   pickPitch,
@@ -152,5 +153,85 @@ describe('pickPitch', () => {
       expect(p).toBeGreaterThanOrEqual(0)
       expect(p).toBeLessThan(N)
     }
+  })
+})
+
+describe('getSequentialNeighbors', () => {
+  const shape = [2, 4]  // 2 voices × 4 positions
+  const strides = computeStrides(shape)
+
+  it('returns predecessor and successor in playback order', () => {
+    expect(getSequentialNeighbors(1, shape, strides)).toEqual([0, 2])
+    expect(getSequentialNeighbors(5, shape, strides)).toEqual([4, 6])
+  })
+
+  it('wraps within its own voice', () => {
+    // idx=3 is the last position of voice 0: next wraps to 0, stays in voice 0
+    expect(getSequentialNeighbors(3, shape, strides)).toEqual([2, 0])
+    // idx=7 is the last position of voice 1
+    expect(getSequentialNeighbors(7, shape, strides)).toEqual([6, 4])
+  })
+
+  it('returns nothing for a single-note voice', () => {
+    expect(getSequentialNeighbors(0, [1, 1], computeStrides([1, 1]))).toEqual([])
+  })
+})
+
+describe('jump and thematic terms', () => {
+  // All-zero cost table isolates Terms 3/4 from Term 1.
+  const zeroTable = new Float32Array(9)
+
+  it('jump weight penalises leaps to sequential neighbours', () => {
+    const shape = [1, 4]
+    const strides = computeStrides(shape)
+    const arr = new Int16Array([0, 0, 0, 0])
+    const vs = [{ center: 0, range: 3 }]
+    const w = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
+    // idx=1: sequential neighbours arr[0]=0 and arr[2]=0
+    expect(computeNoteCost(1, 0, arr, shape, strides, 3, zeroTable, vs, w)).toBe(0)
+    expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, w)).toBe(4)
+    // With jump weight off, the leap is free
+    expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, { ...w, jumpWeight: 0 })).toBe(0)
+  })
+
+  it('thematic weight penalises mismatch with long-range neighbours', () => {
+    const shape = [1, 3, 3]
+    const strides = computeStrides(shape)
+    const arr = new Int16Array(9)  // all 0
+    const vs = [{ center: 0, range: 3 }]
+    const w = { rangeWeight: 0, jumpWeight: 0, thematicWeight: 1 }
+    // idx=0: long-range (dim 1) neighbours are arr[3]=0 and arr[6]=0
+    expect(computeNoteCost(0, 0, arr, shape, strides, 3, zeroTable, vs, w)).toBe(0)
+    expect(computeNoteCost(0, 1, arr, shape, strides, 3, zeroTable, vs, w)).toBe(2)
+  })
+
+  it('thematic term is a no-op for shapes with no long-range dim', () => {
+    const shape = [1, 4]
+    const strides = computeStrides(shape)
+    const arr = new Int16Array([0, 0, 0, 0])
+    const vs = [{ center: 0, range: 3 }]
+    const w = { rangeWeight: 0, jumpWeight: 0, thematicWeight: 5 }
+    expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, w)).toBe(0)
+  })
+
+  it('computeTotalCost counts each sequential edge once', () => {
+    const shape = [1, 4]
+    const strides = computeStrides(shape)
+    const vs = [{ center: 0, range: 3 }]
+    const w = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
+    expect(computeTotalCost(new Int16Array([0, 0, 0, 0]), shape, strides, 3, zeroTable, vs, w)).toBe(0)
+    // Alternating 0,2: four cyclic edges, each |diff| = 2
+    expect(computeTotalCost(new Int16Array([0, 2, 0, 2]), shape, strides, 3, zeroTable, vs, w)).toBe(8)
+  })
+
+  it('computeTotalCost counts each long-range edge once', () => {
+    const shape = [1, 3, 3]
+    const strides = computeStrides(shape)
+    const vs = [{ center: 0, range: 3 }]
+    const w = { rangeWeight: 0, jumpWeight: 0, thematicWeight: 1 }
+    const arr = new Int16Array(9)
+    arr[0] = 1
+    // Long-range dim-1 edges touching idx 0: (0,3) and (6,0) — both mismatch
+    expect(computeTotalCost(arr, shape, strides, 3, zeroTable, vs, w)).toBe(2)
   })
 })

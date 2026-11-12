@@ -20,11 +20,38 @@ export function getNeighborIndices(idx, shape, strides) {
   return neighbors
 }
 
+// Returns the predecessor / successor of position idx in playback order
+// (the linear order within its voice), wrapping within the voice —
+// playback itself wraps pitch indices, so the sequence is cyclic.
+// Empty when a voice holds a single note (no sequential neighbour exists).
+export function getSequentialNeighbors(idx, shape, strides) {
+  const perVoice = shape.slice(1).reduce((a, b) => a * b, 1)
+  if (perVoice <= 1) return []
+  const voiceStart = Math.floor(idx / strides[0]) * perVoice
+  const pos = idx - voiceStart
+  return [
+    voiceStart + ((pos - 1 + perVoice) % perVoice),
+    voiceStart + ((pos + 1) % perVoice),
+  ]
+}
+
 // Cost of placing pitch p at index idx, given current neighbour pitches.
 // Term 1: harmonic cost to all hypercube neighbours (includes cross-voice).
 // Term 2: voice range cost (quadratic penalty away from voiceCenter).
+// Term 3 (jumpWeight): melodic leap penalty — linear in the scale-degree
+//   distance to the predecessor / successor in playback order. Without it
+//   a note's immediate neighbours in time were only 1 of its 6 hypercube
+//   neighbours, so lines leapt freely even when the harmony was consonant.
+// Term 4 (thematicWeight): phrase-similarity penalty — one unit per
+//   long-range hypercube neighbour (dims other than the voice dim and the
+//   sequential last dim) whose pitch differs from p. It rewards a note for
+//   matching the notes a section away, i.e. motif repetition across the
+//   cube, beyond what the interval cost already rewards. It is a no-op for
+//   shapes with no such dim (e.g. [voices, d]).
 export function computeNoteCost(idx, pitch, scoreArray, shape, strides, N, costTable, voiceSettings, weights) {
   const rangeWeight = weights?.rangeWeight ?? 1.0
+  const jumpWeight = weights?.jumpWeight ?? 0.0
+  const thematicWeight = weights?.thematicWeight ?? 0.0
 
   let cost = 0
 
@@ -37,6 +64,28 @@ export function computeNoteCost(idx, pitch, scoreArray, shape, strides, N, costT
   const vs = voiceSettings[voice] ?? { center: Math.floor(N / 2), range: N }
   const dist = Math.min(Math.abs(pitch - vs.center), N - Math.abs(pitch - vs.center))
   cost += rangeWeight * dist * dist
+
+  // Term 3 — sequential (melodic) neighbours, in scale degrees
+  if (jumpWeight !== 0) {
+    for (const ni of getSequentialNeighbors(idx, shape, strides)) {
+      cost += jumpWeight * Math.abs(pitch - scoreArray[ni])
+    }
+  }
+
+  // Term 4 — long-range (thematic) neighbours: dims other than voice (0)
+  // and the sequential last dim.
+  if (thematicWeight !== 0 && shape.length > 2) {
+    for (let k = 1; k < shape.length - 1; k++) {
+      const dk = shape[k]
+      if (dk === 1) continue
+      const pos = Math.floor(idx / strides[k]) % dk
+      const base = idx - pos * strides[k]
+      const plus = base + ((pos + 1) % dk) * strides[k]
+      const minus = base + ((pos - 1 + dk) % dk) * strides[k]
+      if (scoreArray[plus] !== pitch) cost += thematicWeight
+      if (scoreArray[minus] !== pitch) cost += thematicWeight
+    }
+  }
 
   return cost
 }
@@ -72,6 +121,8 @@ export function pickPitch(idx, scoreArray, shape, strides, N, costTable, voiceSe
 // consistent with computeNoteCost and produces the correct energy shape.
 export function computeTotalCost(scoreArray, shape, strides, N, costTable, voiceSettings, weights) {
   const rangeWeight = weights?.rangeWeight ?? 1.0
+  const jumpWeight = weights?.jumpWeight ?? 0.0
+  const thematicWeight = weights?.thematicWeight ?? 0.0
   let total = 0
 
   for (let idx = 0; idx < scoreArray.length; idx++) {
@@ -91,6 +142,24 @@ export function computeTotalCost(scoreArray, shape, strides, N, costTable, voice
     const vs = voiceSettings[voice] ?? { center: Math.floor(N / 2), range: N }
     const dist = Math.min(Math.abs(p - vs.center), N - Math.abs(p - vs.center))
     total += rangeWeight * dist * dist
+
+    // Term 3 — count only the +1 sequential neighbour (cyclic within the
+    // voice, so every sequential edge is counted exactly once)
+    if (jumpWeight !== 0) {
+      const [, next] = getSequentialNeighbors(idx, shape, strides)
+      if (next !== undefined) total += jumpWeight * Math.abs(p - scoreArray[next])
+    }
+
+    // Term 4 — count only +1 neighbours in the long-range dims
+    if (thematicWeight !== 0 && shape.length > 2) {
+      for (let k = 1; k < shape.length - 1; k++) {
+        const dk = shape[k]
+        if (dk === 1) continue
+        const pos = Math.floor(idx / strides[k]) % dk
+        const ni = idx - pos * strides[k] + ((pos + 1) % dk) * strides[k]
+        if (scoreArray[ni] !== p) total += thematicWeight
+      }
+    }
   }
 
   return total

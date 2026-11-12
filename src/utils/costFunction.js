@@ -53,6 +53,14 @@ function pairConsonanceScore(intervalCents, ratios, proximityK, power) {
 // costTable[i*N + j] = cost of the interval from scale[i] to scale[j].
 // Low cost = consonant; high cost = dissonant.
 //
+// Unison (the diagonal) is NOT zero: it is set to the cheapest non-unison
+// cost in the table. A zero diagonal made a single repeated pitch the
+// global optimum — every neighbour pair paid nothing, so cold annealing
+// collapsed the whole piece to one note (a drone). With the diagonal
+// floored at the best consonant interval, repeating a note is exactly as
+// cheap as the best fifth/third, no cheaper, so the cold state is a
+// consonant chord / tonal centre instead of a single pitch.
+//
 // Parameters:
 //   power      (default 2.0)  — spreads the score range; increase for more primes
 //   maxPQ      (default 20)   — upper bound on p and q in candidate ratios
@@ -66,10 +74,22 @@ export function computeCostTable(scale, edo, primes, { power = 2.0, maxPQ = 20, 
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const intervalCents = ((scale[j] - scale[i] + edo) % edo) * edoStepCents
-      if (intervalCents === 0) continue  // unison: cost stays 0.0
+      if (intervalCents === 0) continue  // unison: filled in below, from the off-diagonal minimum
       const score = pairConsonanceScore(intervalCents, ratios, proximityK, power)
       table[i * N + j] = 1.0 / Math.max(score, 0.001)
     }
+  }
+
+  // Unison floor: cheapest non-unison cost (0 only when N === 1, where
+  // there is no other pitch to move to).
+  let minOffDiagonal = Infinity
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      if (i !== j && table[i * N + j] < minOffDiagonal) minOffDiagonal = table[i * N + j]
+    }
+  }
+  if (Number.isFinite(minOffDiagonal)) {
+    for (let i = 0; i < N; i++) table[i * N + i] = minOffDiagonal
   }
   return table
 }

@@ -24,13 +24,22 @@ const initialState = {
   // Step 3
   selectedComma: null,
   scale: null,
-  // Step 4
-  costParams: { power: 2.0, maxPQ: 20, proximityK: 0.1 },
+  // Step 4 — cost defaults chosen so the table lands in a usable range:
+  // power 1.0 / maxPQ 100 gives ~2.5–32 for 53-EDO MOS7 (old defaults
+  // 2.0 / 20 gave 0–1000, so the interesting temperature was far from the
+  // blog's 5–10 and cold annealing collapsed to a drone).
+  costParams: { power: 1.0, maxPQ: 100, proximityK: 0.1 },
   voiceCount: 3,
   voiceSettings: [{ centerHz: 131 }, { centerHz: 196 }, { centerHz: 294 }],
   // Step 5
   cubeDims: [6, 6, 6],
-  weights: { rangeWeight: 1.0, jumpWeight: 0.0, thematicWeight: 0.0 },
+  // Jump/thematic defaults measured on 53-EDO MOS7 at T20 (3-seed
+  // averages): jump 5.0 cuts large melodic leaps from ~52% to ~35% while
+  // keeping entropy ~2.0; jump 10 halves leaps again but repeats half the
+  // notes; thematic 0.5 is a light motif nudge (2.0+ freezes the piece
+  // into repeats, and with either weight high, cooling below ~T10
+  // collapses to repeats — snapshot around T15–30).
+  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5 },
   rhythmSettings: {
     mode:              'simple',  // 'simple' | 'full'
     measureSec:        5.0,
