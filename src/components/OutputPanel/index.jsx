@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
 import { AudioEngine as AudioEngineClass, buildNoteEvents, F_TABLES } from '../../utils/audioEngine'
-import { generateSimpleRhythm, generateFullRhythm } from '../../utils/rhythmUtils'
+import { generateSimpleRhythm, generateFullRhythm, DEFAULT_MAX_NOTE_SEC } from '../../utils/rhythmUtils'
 import { importCSound } from '../../utils/csoundIO'
 import SnapshotSelector from './SnapshotSelector'
 import FoldedScore from './FoldedScore'
@@ -46,6 +46,8 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
         minNoteSec:      rhythmSettings.minNoteSec,
         restProb:        rhythmSettings.restProb,
         joinProb:        rhythmSettings.joinProb,
+        maxNoteSec:       (rhythmSettings.capLongNotes ?? true) ? DEFAULT_MAX_NOTE_SEC : undefined,
+        measureJitter:   rhythmSettings.measureJitter ?? 0,
       }
       if (rhythmSettings.independentVoices) {
         rhythmPerVoice = Array.from({ length: numVoices }, () =>

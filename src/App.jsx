@@ -24,13 +24,33 @@ const initialState = {
   // Step 3
   selectedComma: null,
   scale: null,
-  // Step 4
-  costParams: { power: 2.0, maxPQ: 20, proximityK: 0.1 },
+  // Step 4 — cost defaults chosen so the table lands in a usable range:
+  // power 1.0 / maxPQ 100 gives ~2.5–32 for 53-EDO MOS7 (old defaults
+  // 2.0 / 20 gave 0–1000, so the interesting temperature was far from the
+  // blog's 5–10 and cold annealing collapsed to a drone).
+  costParams: { power: 1.0, maxPQ: 100, proximityK: 0.1 },
   voiceCount: 3,
   voiceSettings: [{ centerHz: 131 }, { centerHz: 196 }, { centerHz: 294 }],
   // Step 5
   cubeDims: [6, 6, 6],
-  weights: { rangeWeight: 1.0, jumpWeight: 0.0, thematicWeight: 0.0 },
+  // Jump/thematic defaults measured on 53-EDO MOS7 at T20 (3-seed
+  // averages): jump 5.0 cuts large melodic leaps from ~52% to ~35% while
+  // keeping entropy ~2.0; jump 10 halves leaps again but repeats half the
+  // notes; thematic 0.5 is a light motif nudge (2.0+ freezes the piece
+  // into repeats, and with either weight high, cooling below ~T10
+  // collapses to repeats — snapshot around T15–30). The jump term is
+  // U-shaped (sequentialStepCost): steps are free, repeats cost
+  // repeatCost (2.0), leaps cost d-1 — so the escape hatch is stepping,
+  // not repeating.
+  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5, thematicTransposed: false },
+  // motif seeding (off by default): { enabled, source: 'preset' | 'custom',
+  // presetId, customDegrees } — degrees are scale degrees, so the motif
+  // follows whatever scale is built
+  motif: { enabled: false, source: 'preset', presetId: 'beethoven5', customDegrees: [] },
+  // two-phase mode (off by default): Phase 1 cools from random to find
+  // the transition temperature; Phase 2 restarts from the comma
+  // traversal seed at that temperature. Off = the usual single run.
+  twoPhase: { enabled: false },
   rhythmSettings: {
     mode:              'simple',  // 'simple' | 'full'
     measureSec:        5.0,
@@ -41,6 +61,12 @@ const initialState = {
     minNoteSec:        0.15,
     restProb:          0.1,
     joinProb:          0.3,
+    // cap long held notes (on): no single note lasts longer than
+    // DEFAULT_MAX_NOTE_SEC (2 s) — stops one pitch droning for most of
+    // a slow measure; uncheck to restore the old uncapped behaviour
+    capLongNotes:      true,
+    // per-measure tempo variation (±10%): keeps the pulse from feeling metronomic
+    measureJitter:     0.1,
     independentVoices: true,
   },
   snapshots: [],
@@ -61,6 +87,8 @@ function reducer(state, action) {
     case 'SET_VOICE_COUNT':    return { ...state, voiceCount: action.payload }
     case 'SET_CUBE_DIMS':      return { ...state, cubeDims: action.payload }
     case 'SET_WEIGHTS':        return { ...state, weights: action.payload }
+    case 'SET_MOTIF':          return { ...state, motif: action.payload }
+    case 'SET_TWO_PHASE':      return { ...state, twoPhase: action.payload }
     case 'SET_RHYTHM_SETTINGS': return { ...state, rhythmSettings: action.payload }
     case 'ADD_SNAPSHOT':       return { ...state, snapshots: [...state.snapshots, action.payload] }
     default:                 return state
@@ -126,6 +154,13 @@ export default function App() {
                 onCubeDimsChange={(d) => dispatch({ type: 'SET_CUBE_DIMS', payload: d })}
                 weights={state.weights}
                 onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
+                motif={state.motif}
+                onMotifChange={(m) => dispatch({ type: 'SET_MOTIF', payload: m })}
+                twoPhase={state.twoPhase}
+                onTwoPhaseChange={(t) => dispatch({ type: 'SET_TWO_PHASE', payload: t })}
+                selectedComma={state.selectedComma}
+                xInterval={state.xInterval}
+                yInterval={state.yInterval}
                 rhythmSettings={state.rhythmSettings}
                 onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
                 snapshots={state.snapshots}

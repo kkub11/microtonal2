@@ -152,6 +152,37 @@ export default function RhythmSettings({ rhythmSettings, onChange }) {
             fmt={v => `${Math.round(v * 100)} %`}
           />
 
+          {/* Tempo variation */}
+          <Slider
+            label="Tempo variation"
+            hint="Each measure's length varies by ± this much. Higher = more breathing and rubato, less metronomic."
+            min={0} max={0.4} step={0.01}
+            value={rs.measureJitter ?? 0}
+            onChange={set('measureJitter')}
+            fmt={v => `±${Math.round(v * 100)} %`}
+          />
+
+          {/* Cap long held notes */}
+          <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+            <input
+              type="checkbox"
+              checked={rs.capLongNotes ?? true}
+              onChange={e => set('capLongNotes')(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded accent-violet-600 cursor-pointer"
+            />
+            <span className="space-y-0.5">
+              <span className="text-sm text-slate-700 dark:text-slate-300 block">
+                Cap long held notes
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 block">
+                No single note lasts longer than about 2 seconds. Turn this on if you notice
+                one pitch being held for a long time — it stops long drones without changing
+                anything else. Off restores the old behaviour, where a note could last most
+                of a measure.
+              </span>
+            </span>
+          </label>
+
           {/* Independent voice rhythms */}
           <label className="flex items-start gap-2.5 cursor-pointer select-none group">
             <input

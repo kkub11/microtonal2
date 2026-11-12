@@ -290,9 +290,27 @@ Floor ensures no interval ever gets score zero.
 **Step 6: Invert to cost**
   cost[i][j] = 1.0 / score[i][j]
 
+**Step 6b: Unison floor**
+  cost[i][i] = min over i≠j of cost[i][j]
+A zero diagonal made a single repeated pitch the global optimum — cold
+annealing collapsed to a drone. Flooring unison at the cheapest
+consonant interval makes repeating a note exactly as cheap as the best
+fifth/third, no cheaper. Note the floor alone does not stop collapse
+under the old defaults (power 2.0 / maxPQ 20): the cost range is so
+extreme (up to 1000) that at low T any non-perfect interval is
+forbidden and unison is still the only assignment that tiles the cube
+consistently. It is the combination of the floor with the softer
+defaults below that moves the collapse down to ~T10.
+
 **Step 7: Validate range**
 Display computed min/max. Let user adjust power and maxPQ until
 the range is approximately 0.1 to 10.
+The shipped defaults (power 1.0, maxPQ 100) give ~2.5–32 for 53-EDO
+MOS7 — still above the 0.1–10 target, but an order of magnitude closer
+than the old defaults (0–1000), and the interesting temperature now
+sits at ~T15–50 instead of ~T50–200. Pushing power down toward 0.5
+would hit 0.1–10 but flattens the consonance contrast too far to be
+useful; the target is guidance, not a hard rule.
 
 **User-adjustable parameters:**
   power      (slider 0.5–4.0): spreads score range
@@ -314,17 +332,86 @@ Main musical term. All neighbors in all dimensions should be consonant.
   cost += rangeWeight * (p - voiceCenter)^2
 Keeps voices from drifting too far from their center pitch.
 
-**Term 3: Melodic jump cost**
-  cost += jumpWeight * stepDistance(p, prevPitch) * costTable[p][prevPitch]
-Penalizes large leaps, but modulated by consonance — a consonant
-octave leap can be preferred over a dissonant half-step.
+**Term 3: Melodic jump cost** (implemented; the Jump slider in Step 5
+now actually does something — previously annealing read only rangeWeight)
+  cost += jumpWeight * stepCost(|p - neighbourPitch|) for the predecessor
+  and successor in playback order, where stepCost is U-shaped:
+  a repeat costs repeatCost (default 2.0), a step to a neighbouring
+  degree costs 0, a leap of d ≥ 2 costs d − 1.
+A purely linear penalty made repeats the cheapest escape (cost 0), so
+lines degenerated into long runs of one note — the listener's report
+on the first render round was exactly that: lots of repetition of the
+same note in a row. The U-shape makes stepwise motion the preferred
+motion instead. Measured on 53-EDO MOS7 at T20 (3-seed averages, jump
+5.0, thematic 0.5): repeats 27% / steps 34% / leaps 39% at repeatCost
+0.5; 23% / 38% / 40% at 1.0; 18% / 42% / 40% at 2.0, entropy ~2.1
+throughout. Default 2.0, slider range 0–10. Jim's original sketch
+modulated this by the interval cost
+(`jumpWeight * stepDistance * costTable[p][prevPitch]`, so a consonant
+octave leap could beat a dissonant half-step); the U-shaped form was
+chosen because its effect is directly measurable.
 
-**Term 4: Thematic similarity cost**
-When the same position appears in two different phrase repetitions,
-the melodic interval leading into it should match between repetitions.
+**Term 4: Thematic similarity cost** (implemented as a first step toward
+Jim's phrase-matching design below)
+  cost += thematicWeight for each long-range hypercube neighbour (dims
+other than the voice dim and the sequential last dim) whose pitch
+differs from p.
+It rewards a note for matching the notes a section away, i.e. motif
+repetition across the cube, beyond what the interval cost already
+rewards. It is a no-op for shapes with no such dim (e.g. [voices, d]).
+Measured: thematic 0.5 is a light nudge; 2.0+ with jump 10 pushes
+repeats to ~70% and entropy down to ~1.6; 5.0 freezes the piece.
+Default 0.5. Note: with either weight high, cooling below ~T10
+collapses to repeats — snapshot around T15–30 instead.
+
+Jim's fuller Term 4 design (IMPLEMENTED 2026-11-12, branch
+`musicality-fixes`, behind the "Transposed phrase matching" checkbox
+next to the Thematic slider, off by default): when the same position
+appears in two different phrase repetitions, the melodic interval
+leading into it should match between repetitions.
   expectedPitch = b1 + (a2 - a1)   // transpose snippet A's interval to B
   cost += thematicWeight * costTable[p * N + expectedPitch]
-Encodes melodic shape preservation across phrase variations.
+Encodes melodic shape preservation across phrase variations. The
+substrate is the same long-range hypercube neighbours as the simple
+rule (the same position in a different section); the "interval leading
+into" a note is the step from its sequential predecessor, and the
+expected pitch is the partner's step applied to that predecessor,
+wrapped mod N. Degree differences are raw (as in the jump term), not
+shortest-wrapped. The cost is directed, so computeTotalCost sums both
+directions of each long-range edge (unlike the symmetric simple rule,
+which counts each edge once). Measured 2026-11-12 (exp14, 53-EDO MOS7,
+T20, 3-seed): transposed-match rate (chance ≈ 14%) is 14.4% with the
+term off, 16.2% at thematic 0.5 and 17.7% at 2.0 with an Ode to Joy
+motif planted; 17.2% off vs 22.9% at 2.0 with no motif — the rule works
+and the effect grows with weight, but it is subtle at the default 0.5
+(the checkbox note says to raise the slider). Entropy/repeats barely
+move at 0.5, so the piece's character is unchanged.
+
+**History — why the Jump/Thematic sliders did nothing (found 2026-11-12):**
+the terms were specified in NOTES.md from the very first commit
+(2026-05-20) and the sliders were built in Session 9 (2026-05-27,
+d0ea2f4), complete with live SET_WEIGHTS plumbing to the worker — but
+`computeNoteCost` / `computeTotalCost` only ever read `rangeWeight`.
+`git log -S weights.jumpWeight` on annealing.js is empty before the
+2026-11-12 wiring commit (1f7db4c): the terms were never implemented,
+nothing was removed, and it was not a regression — a spec-to-code gap
+from the start, left for a later session that never happened. The
+sliders now work (see Terms 3/4 above).
+
+**Motif seeding (added 2026-11-12):** Step 5 has a "Seed with a motif"
+checkbox (off by default). When on, a short phrase — a preset (8 famous
+motifs: Beethoven's 5th, Ode to Joy, Twinkle Twinkle, Happy Birthday,
+Jaws, Star Wars, Greensleeves, Seven Nation Army) or one the user plays
+by tapping scale degrees — is planted into the score array and PINNED:
+each voice gets the motif transposed by 2 degrees per voice, at the
+start of its sequence and once halfway through. Pinning is essential:
+without it a planted motif is forgotten within ~20k iterations
+(measured: only ~17% of planted notes survive to T20, vs ~13% by
+chance, no 5-note fragment survives). With pinning the motif is intact
+after 1.1M iterations and the rest of the score anneals around it.
+Motifs are scale degrees, so they follow the current scale. The motif
+can be turned on live (SET_MOTIF plants it into the running piece) or
+off (unpins; planted notes anneal away).
 
 **Weight parameters (user-adjustable):**
   rangeWeight, jumpWeight, thematicWeight
@@ -379,6 +466,46 @@ a two-phase process the app should explicitly support as a named mode:
 The app should offer a "Two-Phase Mode" button in the CompositionPanel
 that guides the user through these two phases, automatically recording
 T_transition from Phase 1 and pre-filling it for Phase 2.
+
+**IMPLEMENTED 2026-11-12 (branch `musicality-fixes`, off by default):**
+`TwoPhaseMode.jsx` + `twoPhaseUtils.js`. Phase 1 starts at T200 with
+auto-cool on and random init (the motif is ignored); a knuckle detector
+(`detectTransition`, log-T-binned median costs, steepest cost drop per
+log-T) watches the PROGRESS stream and, when it fires, auto-snapshots
+at that temperature, pauses, and offers "Start Phase 2". A "Set
+transition here" button covers the case where the detector stays
+silent. Phase 2 restarts the worker at fixed T_transition with the
+comma traversal (or the scale itself when no comma is selected) planted
+as the seed. Three measured deviations from the design above, all
+documented because they change the behaviour:
+- The knuckle in 53-EDO MOS7 is a gentle knee, not Jim's sharp drop
+  (cost falls smoothly from ~8k at T165 to ~2.9k at T3). The detector
+  therefore *proposes* a transition (the steepest drop it has seen —
+  T≈26 in an offline run, T≈55 in a live browser run) and the user
+  confirms it; it is a guide, not an oracle.
+- **The seed is NOT preserved without pinning.** Measured 2026-11-12
+  (exp13): a traversal-seeded array run at fixed T keeps only
+  ~13–20% of its seed positions after 100k iterations — chance level
+  (1/7) — at every fixed temperature tested (T20–T150). So Phase 2
+  pins the seed, exactly as motif seeding does; without pinning the
+  feature would be a placebo.
+- Full-array cycling plus pinning would freeze the piece (every
+  position pinned), so Phase 2 plants the traversal at two anchors
+  per voice (start + halfway, untransposed) instead of cycling it
+  across the whole array. The worker's `initMode: 'seed'` cycle-fill
+  path remains unused by the UI.
+- **Motif + Two-Phase composition (2026-11-12, Kanon's call — the user
+  decides in the interface, the options are not mutually exclusive):**
+  the Phase 2 seed precedence is motif (when motif seeding is on) >
+  comma traversal (when a comma is selected) > scale itself. When both
+  are on, the Two-Phase card shows a note: "Your motif (X) is on, so
+  Phase 2 will be seeded from the motif instead of the comma
+  traversal. Phase 1 still starts from random. Turn the motif off and
+  Phase 2 goes back to the traversal." The motif is planted transposed
+  per voice (its normal behaviour); traversal/scale seeds are planted
+  untransposed. Turning the motif on mid-run still plants it live
+  (SET_MOTIF), which now coheres with the precedence — the motif wins
+  whenever it is on.
 
 **The energy graph (cost vs temperature) — what to look for:**
 The log plot from Jim's 270-EDO piece (reference/270edo_scale_16_log.jpg)
@@ -471,6 +598,17 @@ d1 × d2 × ... × dn (the number of measures in the hypercube).
   6. Multiple patterns possible; each measure picks one
      (e.g. 90% pattern A, 10% pattern B)
   7. Patterns are generated independently per voice
+
+**Join cap (added 2026-11-12):** joins in slow measures could hold one
+pitch for most of a measure (up to ~3.8 s measured with 4 s measures,
+join 0.55) — long enough to sound like a drone. `generateFullRhythm`
+takes `maxNoteSec` (default cap 2.0 s, `DEFAULT_MAX_NOTE_SEC`): a join
+never creates a note longer than the cap, and a slot over the cap keeps
+subdividing past `maxDepth`. The UI exposes it as the "Cap long held
+notes" checkbox in Full rhythm mode (on by default); total duration is
+unchanged — long notes are split into more notes, not dropped. Measured
+on G2 settings (200 measures): cap off max 3.84 s, 5 notes > 2 s; cap on
+max 1.98 s, 0 notes > 2 s.
 
 **Pitch assignment:**
 After rhythm generation, zip rhythm events with the flattened score

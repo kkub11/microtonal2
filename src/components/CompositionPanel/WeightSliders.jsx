@@ -33,16 +33,29 @@ export default function WeightSliders({ weights, onChange }) {
         label="Jump weight"
         hint="melodic leap penalty"
         value={weights.jumpWeight}
-        max={5}
+        max={10}
         onChange={set('jumpWeight')}
       />
       <Slider
         label="Thematic weight"
-        hint="phrase similarity"
+        hint="long-range phrase match"
         value={weights.thematicWeight}
         max={5}
         onChange={set('thematicWeight')}
       />
+      <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+        <input
+          type="checkbox"
+          checked={weights.thematicTransposed ?? false}
+          onChange={e => set('thematicTransposed')(e.target.checked)}
+          className="mt-0.5 w-4 h-4 rounded accent-violet-600 cursor-pointer"
+        />
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Transposed phrase matching (Jim&apos;s full Term 4): a phrase may come back
+          shifted, not just repeated. Subtle at the default weight — raise the
+          Thematic slider for a stronger effect. Works best with a motif seeded.
+        </span>
+      </label>
     </div>
   )
 }
