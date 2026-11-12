@@ -18,8 +18,24 @@ export function generateSimpleRhythm(numMeasures, measureSec, divisor) {
   return events
 }
 
+/**
+ * Longest a single note may last when the join cap is on (seconds).
+ * Joins in slow measures can otherwise hold one pitch for most of a
+ * measure (up to ~5 s with 4 s measures) — long enough to sound like a
+ * drone rather than a note. 2 s is several times the usual minimum
+ * note length but short enough that no pitch gets stuck.
+ */
+export const DEFAULT_MAX_NOTE_SEC = 2.0
+
 function subdivide(startSec, durationSec, opts, depth) {
-  if (durationSec <= opts.minNoteSec || depth >= opts.maxDepth) {
+  const cap = opts.maxNoteSec
+  const overCap = cap != null && durationSec > cap
+  // Leaf: short enough, or deep enough — unless still over the cap, in
+  // which case keep splitting (the +10 is an absolute safety valve so
+  // a pathological config can never recurse forever).
+  if ((durationSec <= opts.minNoteSec && !overCap) ||
+      (depth >= opts.maxDepth && !overCap) ||
+      depth >= opts.maxDepth + 10) {
     return [{ startSec, durationSec, isRest: Math.random() < opts.restProb }]
   }
 
@@ -30,7 +46,10 @@ function subdivide(startSec, durationSec, opts, depth) {
   const slots = []
   let i = 0
   while (i < parts.length) {
-    if (i + 1 < parts.length && Math.random() < opts.joinProb) {
+    // A join must not create a note longer than the cap.
+    const joinOk = i + 1 < parts.length &&
+      (cap == null || parts[i].d + parts[i + 1].d <= cap)
+    if (joinOk && Math.random() < opts.joinProb) {
       slots.push({ s: parts[i].s, d: parts[i].d + parts[i + 1].d })
       i += 2
     } else {
@@ -52,6 +71,11 @@ function subdivide(startSec, durationSec, opts, depth) {
  * @param {number}   [options.restProb=0.08]    - Probability a leaf note becomes a rest
  * @param {number}   [options.joinProb=0.35]    - Probability of joining adjacent equal parts
  * @param {number}   [options.maxDepth=4]       - Maximum recursion depth
+ * @param {number}   [options.maxNoteSec]       - Longest a single note may
+ *   last (seconds). When set, joins never create a longer note and a slot
+ *   over the cap keeps subdividing past maxDepth. Unset = no cap (the old
+ *   behaviour: a note can last most of a measure). The UI exposes this as
+ *   the "Cap long held notes" checkbox (DEFAULT_MAX_NOTE_SEC = 2.0 s).
  * @param {number}   [options.measureJitter=0]  - Per-measure tempo variation: each
  *   measure's length is scaled by 1 ± jitter (e.g. 0.15 = ±15%). 0 = every
  *   measure exactly measureSec long. Gives the piece breathing / rubato
@@ -65,6 +89,7 @@ export function generateFullRhythm(numMeasures, measureSec, options = {}) {
     restProb:        options.restProb        ?? 0.08,
     joinProb:        options.joinProb        ?? 0.35,
     maxDepth:        options.maxDepth        ?? 4,
+    maxNoteSec:      options.maxNoteSec,
   }
   const jitter = options.measureJitter ?? 0
   const events = []

@@ -53,6 +53,10 @@ const initialState = {
     minNoteSec:        0.15,
     restProb:          0.1,
     joinProb:          0.3,
+    // cap long held notes (on): no single note lasts longer than
+    // DEFAULT_MAX_NOTE_SEC (2 s) — stops one pitch droning for most of
+    // a slow measure; uncheck to restore the old uncapped behaviour
+    capLongNotes:      true,
     // per-measure tempo variation (±10%): keeps the pulse from feeling metronomic
     measureJitter:     0.1,
     independentVoices: true,

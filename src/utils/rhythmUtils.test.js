@@ -155,3 +155,41 @@ describe('generateFullRhythm measureJitter', () => {
     }
   })
 })
+
+describe('generateFullRhythm maxNoteSec (join cap)', () => {
+  // G2-like slow settings: 4 s measures, high join probability — the
+  // combination that used to hold one pitch for most of a measure.
+  const slow = { allowedDivisors: [2, 3], minNoteSec: 0.6, joinProb: 0.55, measureJitter: 0.2 }
+  const maxDur = events => Math.max(...events.map(e => e.durationSec))
+
+  test('cap on: no note exceeds maxNoteSec', () => {
+    const events = generateFullRhythm(64, 4.0, { ...slow, maxNoteSec: 2.0 })
+    expect(maxDur(events)).toBeLessThanOrEqual(2.0 + 1e-9)
+  })
+
+  test('cap off: the same settings do produce notes longer than 2 s', () => {
+    const events = generateFullRhythm(128, 4.0, slow)
+    expect(maxDur(events)).toBeGreaterThan(2.0)
+  })
+
+  test('cap on: total duration is unchanged (notes are split, not dropped)', () => {
+    const events = generateFullRhythm(16, 4.0, { ...slow, maxNoteSec: 2.0, measureJitter: 0 })
+    const total = events.reduce((sum, e) => sum + e.durationSec, 0)
+    expect(total).toBeCloseTo(16 * 4.0, 6)
+  })
+
+  test('cap on: events stay contiguous with no gaps or overlaps', () => {
+    const events = generateFullRhythm(16, 4.0, { ...slow, maxNoteSec: 2.0 })
+    for (let i = 1; i < events.length; i++) {
+      expect(events[i].startSec).toBeCloseTo(events[i - 1].startSec + events[i - 1].durationSec, 6)
+    }
+  })
+
+  test('cap on: holds even past maxDepth (extreme 30 s measures)', () => {
+    const events = generateFullRhythm(8, 30.0, {
+      allowedDivisors: [2, 3], minNoteSec: 0.05, joinProb: 0.55,
+      maxDepth: 4, measureJitter: 0.4, maxNoteSec: 2.0,
+    })
+    expect(maxDur(events)).toBeLessThanOrEqual(2.0 + 1e-9)
+  })
+})

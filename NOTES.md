@@ -518,6 +518,17 @@ d1 × d2 × ... × dn (the number of measures in the hypercube).
      (e.g. 90% pattern A, 10% pattern B)
   7. Patterns are generated independently per voice
 
+**Join cap (added 2026-11-12):** joins in slow measures could hold one
+pitch for most of a measure (up to ~3.8 s measured with 4 s measures,
+join 0.55) — long enough to sound like a drone. `generateFullRhythm`
+takes `maxNoteSec` (default cap 2.0 s, `DEFAULT_MAX_NOTE_SEC`): a join
+never creates a note longer than the cap, and a slot over the cap keeps
+subdividing past `maxDepth`. The UI exposes it as the "Cap long held
+notes" checkbox in Full rhythm mode (on by default); total duration is
+unchanged — long notes are split into more notes, not dropped. Measured
+on G2 settings (200 measures): cap off max 3.84 s, 5 notes > 2 s; cap on
+max 1.98 s, 0 notes > 2 s.
+
 **Pitch assignment:**
 After rhythm generation, zip rhythm events with the flattened score
 array. Event k in voice v gets pitch scoreArray[v * numMeasures + k].
