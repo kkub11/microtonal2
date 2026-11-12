@@ -43,6 +43,10 @@ const initialState = {
   // repeatCost (2.0), leaps cost d-1 — so the escape hatch is stepping,
   // not repeating.
   weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5 },
+  // motif seeding (off by default): { enabled, source: 'preset' | 'custom',
+  // presetId, customDegrees } — degrees are scale degrees, so the motif
+  // follows whatever scale is built
+  motif: { enabled: false, source: 'preset', presetId: 'beethoven5', customDegrees: [] },
   rhythmSettings: {
     mode:              'simple',  // 'simple' | 'full'
     measureSec:        5.0,
@@ -79,6 +83,7 @@ function reducer(state, action) {
     case 'SET_VOICE_COUNT':    return { ...state, voiceCount: action.payload }
     case 'SET_CUBE_DIMS':      return { ...state, cubeDims: action.payload }
     case 'SET_WEIGHTS':        return { ...state, weights: action.payload }
+    case 'SET_MOTIF':          return { ...state, motif: action.payload }
     case 'SET_RHYTHM_SETTINGS': return { ...state, rhythmSettings: action.payload }
     case 'ADD_SNAPSHOT':       return { ...state, snapshots: [...state.snapshots, action.payload] }
     default:                 return state
@@ -144,6 +149,8 @@ export default function App() {
                 onCubeDimsChange={(d) => dispatch({ type: 'SET_CUBE_DIMS', payload: d })}
                 weights={state.weights}
                 onWeightsChange={(w) => dispatch({ type: 'SET_WEIGHTS', payload: w })}
+                motif={state.motif}
+                onMotifChange={(m) => dispatch({ type: 'SET_MOTIF', payload: m })}
                 rhythmSettings={state.rhythmSettings}
                 onRhythmSettingsChange={(r) => dispatch({ type: 'SET_RHYTHM_SETTINGS', payload: r })}
                 snapshots={state.snapshots}

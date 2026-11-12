@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import ArrayShapeSelector from './ArrayShapeSelector'
 import VoiceCountSelector from './VoiceCountSelector'
 import WeightSliders from './WeightSliders'
+import MotifSeeding from './MotifSeeding'
+import { resolveMotif } from '../../utils/motifUtils'
 import RhythmSettings from './RhythmSettings'
 import TemperatureSlider from './TemperatureSlider'
 import EnergyDisplay, { N_ENERGY_BUCKETS, tempToBucket } from './EnergyDisplay'
@@ -25,6 +27,7 @@ export default function CompositionPanel({
   voiceSettings,
   cubeDims, onCubeDimsChange,
   weights, onWeightsChange,
+  motif, onMotifChange,
   rhythmSettings, onRhythmSettingsChange,
   snapshots, onSnapshotAdd,
 }) {
@@ -207,6 +210,7 @@ export default function CompositionPanel({
       N:             scale.length,
       voiceSettings: translateVoiceSettings(voiceSettings),
       weights,
+      motif: resolveMotif(motif),
       temperature,
     })
 
@@ -253,6 +257,11 @@ export default function CompositionPanel({
     workerRef.current?.postMessage({ type: 'SET_WEIGHTS', value: w })
   }
 
+  function handleMotif(m) {
+    onMotifChange(m)
+    workerRef.current?.postMessage({ type: 'SET_MOTIF', value: resolveMotif(m) })
+  }
+
   function handleSnapshot() {
     workerRef.current?.postMessage({ type: 'SNAPSHOT' })
   }
@@ -290,6 +299,13 @@ export default function CompositionPanel({
               </label>
               <WeightSliders weights={weights} onChange={handleWeights} />
             </div>
+          </div>
+
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              Motif Seeding
+            </label>
+            <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
           </div>
 
           <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">

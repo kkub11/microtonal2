@@ -372,6 +372,32 @@ interval leading into it should match between repetitions.
   cost += thematicWeight * costTable[p * N + expectedPitch]
 Encodes melodic shape preservation across phrase variations.
 
+**History — why the Jump/Thematic sliders did nothing (found 2026-11-12):**
+the terms were specified in NOTES.md from the very first commit
+(2026-05-20) and the sliders were built in Session 9 (2026-05-27,
+d0ea2f4), complete with live SET_WEIGHTS plumbing to the worker — but
+`computeNoteCost` / `computeTotalCost` only ever read `rangeWeight`.
+`git log -S weights.jumpWeight` on annealing.js is empty before the
+2026-11-12 wiring commit (1f7db4c): the terms were never implemented,
+nothing was removed, and it was not a regression — a spec-to-code gap
+from the start, left for a later session that never happened. The
+sliders now work (see Terms 3/4 above).
+
+**Motif seeding (added 2026-11-12):** Step 5 has a "Seed with a motif"
+checkbox (off by default). When on, a short phrase — a preset (8 famous
+motifs: Beethoven's 5th, Ode to Joy, Twinkle Twinkle, Happy Birthday,
+Jaws, Star Wars, Greensleeves, Seven Nation Army) or one the user plays
+by tapping scale degrees — is planted into the score array and PINNED:
+each voice gets the motif transposed by 2 degrees per voice, at the
+start of its sequence and once halfway through. Pinning is essential:
+without it a planted motif is forgotten within ~20k iterations
+(measured: only ~17% of planted notes survive to T20, vs ~13% by
+chance, no 5-note fragment survives). With pinning the motif is intact
+after 1.1M iterations and the rest of the score anneals around it.
+Motifs are scale degrees, so they follow the current scale. The motif
+can be turned on live (SET_MOTIF plants it into the running piece) or
+off (unpins; planted notes anneal away).
+
 **Weight parameters (user-adjustable):**
   rangeWeight, jumpWeight, thematicWeight
 

@@ -4,6 +4,7 @@ import {
   pickPitch,
   computeTotalCost,
 } from '../utils/annealing.js'
+import { seedScoreWithMotif } from '../utils/motifUtils.js'
 
 // ─── Worker state ────────────────────────────────────────────────────────────
 
@@ -34,6 +35,20 @@ self.onmessage = ({ data }) => {
     case 'SET_WEIGHTS':
       if (s) s.weights = data.value
       break
+    case 'SET_MOTIF':
+      // Live-plant the motif into the running piece (null = seeding off:
+      // stops re-planting and unpins; whatever was planted anneals away
+      // on its own). Planted positions are pinned: annealing never
+      // resamples them, so the tune stays in the piece.
+      if (s) {
+        s.motif = data.value ?? null
+        s.pinned = new Set()
+        if (s.motif && s.motif.length > 0) {
+          seedScoreWithMotif(s.scoreArray, s.shape, s.motif, s.N, s.pinned)
+          s.totalCost = computeTotalCost(s.scoreArray, s.shape, s.strides, s.N, s.costTable, s.voiceSettings, s.weights)
+        }
+      }
+      break
   }
 }
 
@@ -52,6 +67,8 @@ function init(data) {
     total,
     voiceSettings: data.voiceSettings ?? [],
     weights:       data.weights ?? { rangeWeight: 1.0 },
+    motif:         data.motif ?? null,   // scale-degree list, or null = no seeding
+    pinned:        new Set(),            // score positions holding the motif (never resampled)
     temperature:   data.temperature ?? 200,
     paused:        false,
     scoreArray:    new Int16Array(total),
@@ -73,6 +90,15 @@ function reset(initMode, seed) {
   } else {
     // Random initialization (Phase 1 / default).
     for (let i = 0; i < total; i++) scoreArray[i] = Math.floor(Math.random() * N)
+  }
+
+  // Plant the motif (if any) so annealing grows around a tune instead
+  // of pure noise. Also applies on RESET, since reset() is reused there.
+  // Planted positions are pinned — the annealing loop never resamples
+  // them, otherwise the motif is forgotten within ~20k iterations.
+  s.pinned = new Set()
+  if (s.motif && s.motif.length > 0) {
+    seedScoreWithMotif(scoreArray, s.shape, s.motif, N, s.pinned)
   }
 
   s.iteration = 0
@@ -97,6 +123,7 @@ function runBatch() {
 
   for (let i = 0; i < BATCH; i++) {
     const idx = Math.floor(Math.random() * total)
+    if (s.pinned.has(idx)) continue // motif notes stay put
     scoreArray[idx] = pickPitch(idx, scoreArray, shape, strides, N, costTable, voiceSettings, weights, s.temperature)
   }
 
