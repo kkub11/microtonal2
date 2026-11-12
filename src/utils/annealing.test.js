@@ -181,17 +181,23 @@ describe('jump and thematic terms', () => {
   // All-zero cost table isolates Terms 3/4 from Term 1.
   const zeroTable = new Float32Array(9)
 
-  it('jump weight penalises leaps to sequential neighbours', () => {
+  it('jump weight penalises leaps and repeats, steps are free (U-shaped)', () => {
     const shape = [1, 4]
     const strides = computeStrides(shape)
     const arr = new Int16Array([0, 0, 0, 0])
     const vs = [{ center: 0, range: 3 }]
     const w = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
     // idx=1: sequential neighbours arr[0]=0 and arr[2]=0
-    expect(computeNoteCost(1, 0, arr, shape, strides, 3, zeroTable, vs, w)).toBe(0)
-    expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, w)).toBe(4)
-    // With jump weight off, the leap is free
+    // p=1 (a step from both neighbours): free
+    expect(computeNoteCost(1, 1, arr, shape, strides, 3, zeroTable, vs, w)).toBe(0)
+    // p=0 (repeat of both neighbours): default repeatCost 2.0 × jumpWeight 1, twice
+    expect(computeNoteCost(1, 0, arr, shape, strides, 3, zeroTable, vs, w)).toBe(4)
+    // p=2 (a leap of 2 from both neighbours): (2-1) × jumpWeight 1, twice
+    expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, w)).toBe(2)
+    // With jump weight off, all of it is free
     expect(computeNoteCost(1, 2, arr, shape, strides, 3, zeroTable, vs, { ...w, jumpWeight: 0 })).toBe(0)
+    // repeatCost scales the repeat penalty: repeatCost 0.5 → 0.5 × 2 = 1
+    expect(computeNoteCost(1, 0, arr, shape, strides, 3, zeroTable, vs, { ...w, repeatCost: 0.5 })).toBe(1)
   })
 
   it('thematic weight penalises mismatch with long-range neighbours', () => {
@@ -219,9 +225,11 @@ describe('jump and thematic terms', () => {
     const strides = computeStrides(shape)
     const vs = [{ center: 0, range: 3 }]
     const w = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
-    expect(computeTotalCost(new Int16Array([0, 0, 0, 0]), shape, strides, 3, zeroTable, vs, w)).toBe(0)
-    // Alternating 0,2: four cyclic edges, each |diff| = 2
-    expect(computeTotalCost(new Int16Array([0, 2, 0, 2]), shape, strides, 3, zeroTable, vs, w)).toBe(8)
+    expect(computeTotalCost(new Int16Array([0, 0, 0, 0]), shape, strides, 3, zeroTable, vs, w)).toBe(8)
+    // Alternating 0,2: four cyclic edges, each a leap of 2 → (2-1) = 1 each
+    expect(computeTotalCost(new Int16Array([0, 2, 0, 2]), shape, strides, 3, zeroTable, vs, w)).toBe(4)
+    // Alternating 0,1: four cyclic edges, each a step → free
+    expect(computeTotalCost(new Int16Array([0, 1, 0, 1]), shape, strides, 3, zeroTable, vs, w)).toBe(0)
   })
 
   it('computeTotalCost counts each long-range edge once', () => {

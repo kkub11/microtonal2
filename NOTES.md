@@ -334,18 +334,22 @@ Keeps voices from drifting too far from their center pitch.
 
 **Term 3: Melodic jump cost** (implemented; the Jump slider in Step 5
 now actually does something — previously annealing read only rangeWeight)
-  cost += jumpWeight * |p - prevPitch| + jumpWeight * |p - nextPitch|
-where prev/next are the note's predecessor and successor in playback
-order within its voice (wrapping, since playback is cyclic). Linear in
-scale degrees: a leap of 3 costs 3× a step of 1. Jim's original sketch
+  cost += jumpWeight * stepCost(|p - neighbourPitch|) for the predecessor
+  and successor in playback order, where stepCost is U-shaped:
+  a repeat costs repeatCost (default 2.0), a step to a neighbouring
+  degree costs 0, a leap of d ≥ 2 costs d − 1.
+A purely linear penalty made repeats the cheapest escape (cost 0), so
+lines degenerated into long runs of one note — the listener's report
+on the first render round was exactly that: lots of repetition of the
+same note in a row. The U-shape makes stepwise motion the preferred
+motion instead. Measured on 53-EDO MOS7 at T20 (3-seed averages, jump
+5.0, thematic 0.5): repeats 27% / steps 34% / leaps 39% at repeatCost
+0.5; 23% / 38% / 40% at 1.0; 18% / 42% / 40% at 2.0, entropy ~2.1
+throughout. Default 2.0, slider range 0–10. Jim's original sketch
 modulated this by the interval cost
 (`jumpWeight * stepDistance * costTable[p][prevPitch]`, so a consonant
-octave leap could beat a dissonant half-step); the linear form was
-chosen as the first implementation because its effect is directly
-measurable. Measured on 53-EDO MOS7 at T20 (3-seed averages): jump 5.0
-cuts large leaps (≥3 scale degrees) from ~52% to ~35% with entropy
-still ~2.0; jump 10 halves them again but repeats half the notes; jump
-20 freezes the line into repeats. Default 5.0, slider range 0–10.
+octave leap could beat a dissonant half-step); the U-shaped form was
+chosen because its effect is directly measurable.
 
 **Term 4: Thematic similarity cost** (implemented as a first step toward
 Jim's phrase-matching design below)

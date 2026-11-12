@@ -38,7 +38,10 @@ const initialState = {
   // keeping entropy ~2.0; jump 10 halves leaps again but repeats half the
   // notes; thematic 0.5 is a light motif nudge (2.0+ freezes the piece
   // into repeats, and with either weight high, cooling below ~T10
-  // collapses to repeats — snapshot around T15–30).
+  // collapses to repeats — snapshot around T15–30). The jump term is
+  // U-shaped (sequentialStepCost): steps are free, repeats cost
+  // repeatCost (2.0), leaps cost d-1 — so the escape hatch is stepping,
+  // not repeating.
   weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5 },
   rhythmSettings: {
     mode:              'simple',  // 'simple' | 'full'
@@ -50,6 +53,8 @@ const initialState = {
     minNoteSec:        0.15,
     restProb:          0.1,
     joinProb:          0.3,
+    // per-measure tempo variation (±10%): keeps the pulse from feeling metronomic
+    measureJitter:     0.1,
     independentVoices: true,
   },
   snapshots: [],

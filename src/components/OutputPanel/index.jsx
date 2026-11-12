@@ -46,6 +46,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
         minNoteSec:      rhythmSettings.minNoteSec,
         restProb:        rhythmSettings.restProb,
         joinProb:        rhythmSettings.joinProb,
+        measureJitter:   rhythmSettings.measureJitter ?? 0,
       }
       if (rhythmSettings.independentVoices) {
         rhythmPerVoice = Array.from({ length: numVoices }, () =>

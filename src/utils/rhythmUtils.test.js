@@ -132,3 +132,26 @@ describe('generateFullRhythm', () => {
     }
   })
 })
+
+describe('generateFullRhythm measureJitter', () => {
+  test('jitter 0 (default): total duration equals numMeasures * measureSec', () => {
+    const events = generateFullRhythm(8, 5.0, { minNoteSec: 0.1, maxDepth: 3, measureJitter: 0 })
+    const total = events.reduce((sum, e) => sum + e.durationSec, 0)
+    expect(total).toBeCloseTo(8 * 5.0, 6)
+  })
+
+  test('jitter bounds total duration within ± jitter per measure', () => {
+    const jitter = 0.2
+    const events = generateFullRhythm(16, 5.0, { minNoteSec: 0.1, maxDepth: 3, measureJitter: jitter })
+    const total = events.reduce((sum, e) => sum + e.durationSec, 0)
+    expect(total).toBeGreaterThanOrEqual(16 * 5.0 * (1 - jitter))
+    expect(total).toBeLessThanOrEqual(16 * 5.0 * (1 + jitter))
+  })
+
+  test('jittered events stay contiguous with no gaps or overlaps', () => {
+    const events = generateFullRhythm(8, 5.0, { minNoteSec: 0.1, maxDepth: 3, measureJitter: 0.25 })
+    for (let i = 1; i < events.length; i++) {
+      expect(events[i].startSec).toBeCloseTo(events[i - 1].startSec + events[i - 1].durationSec, 6)
+    }
+  })
+})

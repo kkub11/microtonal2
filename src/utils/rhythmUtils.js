@@ -52,6 +52,10 @@ function subdivide(startSec, durationSec, opts, depth) {
  * @param {number}   [options.restProb=0.08]    - Probability a leaf note becomes a rest
  * @param {number}   [options.joinProb=0.35]    - Probability of joining adjacent equal parts
  * @param {number}   [options.maxDepth=4]       - Maximum recursion depth
+ * @param {number}   [options.measureJitter=0]  - Per-measure tempo variation: each
+ *   measure's length is scaled by 1 ± jitter (e.g. 0.15 = ±15%). 0 = every
+ *   measure exactly measureSec long. Gives the piece breathing / rubato
+ *   instead of a metronomic grid.
  * @returns {{ startSec: number, durationSec: number, isRest: boolean }[]}
  */
 export function generateFullRhythm(numMeasures, measureSec, options = {}) {
@@ -62,9 +66,13 @@ export function generateFullRhythm(numMeasures, measureSec, options = {}) {
     joinProb:        options.joinProb        ?? 0.35,
     maxDepth:        options.maxDepth        ?? 4,
   }
+  const jitter = options.measureJitter ?? 0
   const events = []
+  let offset = 0
   for (let m = 0; m < numMeasures; m++) {
-    events.push(...subdivide(m * measureSec, measureSec, opts, 0))
+    const dur = jitter === 0 ? measureSec : measureSec * (1 + (Math.random() * 2 - 1) * jitter)
+    events.push(...subdivide(offset, dur, opts, 0))
+    offset += dur
   }
   return events
 }

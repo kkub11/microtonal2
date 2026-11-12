@@ -152,6 +152,16 @@ export default function RhythmSettings({ rhythmSettings, onChange }) {
             fmt={v => `${Math.round(v * 100)} %`}
           />
 
+          {/* Tempo variation */}
+          <Slider
+            label="Tempo variation"
+            hint="Each measure's length varies by ± this much. Higher = more breathing and rubato, less metronomic."
+            min={0} max={0.4} step={0.01}
+            value={rs.measureJitter ?? 0}
+            onChange={set('measureJitter')}
+            fmt={v => `±${Math.round(v * 100)} %`}
+          />
+
           {/* Independent voice rhythms */}
           <label className="flex items-start gap-2.5 cursor-pointer select-none group">
             <input
