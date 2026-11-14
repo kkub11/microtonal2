@@ -35,6 +35,12 @@ export default function CompositionPanel({
   selectedComma, xInterval, yInterval,
   rhythmSettings, onRhythmSettingsChange,
   snapshots, onSnapshotAdd,
+  // simple: the Make-music view — hide the tuning cards (shape, weights,
+  // rhythm) and show only what is live for this piece. The motif and
+  // two-phase cards still show when they are switched on, so the user
+  // can see (and drive) them.
+  simple = false,
+  initialWaveform = 'sine',
 }) {
   const workerRef           = useRef(null)
   const audioRef            = useRef(null)
@@ -54,7 +60,7 @@ export default function CompositionPanel({
   const [autoCool,      setAutoCool]  = useState(false)
   const [coolRate,      setCoolRate]  = useState(0.995)
   const [previewOn,       setPreviewOn]       = useState(true)
-  const [previewWaveform, setPreviewWaveform] = useState('sine')
+  const [previewWaveform, setPreviewWaveform] = useState(initialWaveform ?? 'sine')
   const [previewGain,     setPreviewGain]     = useState(0.7)
 
   // Two-Phase Mode progress (runtime state; the enabled toggle lives in App).
@@ -368,9 +374,11 @@ export default function CompositionPanel({
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-        Step 5 — Compose
-      </h2>
+      {!simple && (
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+          Step 5 — Compose
+        </h2>
+      )}
 
       {!ready && (
         <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -382,55 +390,63 @@ export default function CompositionPanel({
 
       {ready && (
         <>
-          {/* ── Settings ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                System Shape
-              </label>
-              <ArrayShapeSelector cubeDims={cubeDims} onChange={onCubeDimsChange} />
-              <VoiceCountSelector voiceCount={voiceCount} onChange={onVoiceCountChange} />
+          {/* ── Settings (Advanced only) ── */}
+          {!simple && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  System Shape
+                </label>
+                <ArrayShapeSelector cubeDims={cubeDims} onChange={onCubeDimsChange} />
+                <VoiceCountSelector voiceCount={voiceCount} onChange={onVoiceCountChange} />
+              </div>
+
+              <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Annealing Weights
+                </label>
+                <WeightSliders weights={weights} onChange={handleWeights} />
+              </div>
             </div>
+          )}
 
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Annealing Weights
+          {(!simple || motif?.enabled) && (
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Motif Seeding
               </label>
-              <WeightSliders weights={weights} onChange={handleWeights} />
+              <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
             </div>
-          </div>
+          )}
 
-          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-              Motif Seeding
-            </label>
-            <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
-          </div>
+          {(!simple || twoPhase?.enabled) && (
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Two-Phase Mode
+              </label>
+              <TwoPhaseMode
+                enabled={twoPhase?.enabled ?? false}
+                onToggle={handleTwoPhaseToggle}
+                phase={phase}
+                tTransition={tTransition}
+                commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
+                seedSource={phase2SeedSource}
+                motifName={motifName}
+                isRunning={status === 'running'}
+                onStartPhase2={handleStartPhase2}
+                onSetTransitionHere={handleSetTransitionHere}
+              />
+            </div>
+          )}
 
-          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-              Two-Phase Mode
-            </label>
-            <TwoPhaseMode
-              enabled={twoPhase?.enabled ?? false}
-              onToggle={handleTwoPhaseToggle}
-              phase={phase}
-              tTransition={tTransition}
-              commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
-              seedSource={phase2SeedSource}
-              motifName={motifName}
-              isRunning={status === 'running'}
-              onStartPhase2={handleStartPhase2}
-              onSetTransitionHere={handleSetTransitionHere}
-            />
-          </div>
-
-          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-              Rhythm Settings
-            </label>
-            <RhythmSettings rhythmSettings={rhythmSettings} onChange={onRhythmSettingsChange} />
-          </div>
+          {!simple && (
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                Rhythm Settings
+              </label>
+              <RhythmSettings rhythmSettings={rhythmSettings} onChange={onRhythmSettingsChange} />
+            </div>
+          )}
 
           {/* ── Start + Audio Preview ── */}
           <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
@@ -492,6 +508,12 @@ export default function CompositionPanel({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Energy
               </label>
+              {simple && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  Lower means more settled. Watch for the sharp drop — that
+                  is where the music finds its shape.
+                </p>
+              )}
               <EnergyDisplay progress={progress} energyBuckets={energyBuckets} />
             </div>
 
@@ -499,6 +521,12 @@ export default function CompositionPanel({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Pitch Distribution
               </label>
+              {simple && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  Which notes the piece is using right now. A few tall bars
+                  means it has found its home notes.
+                </p>
+              )}
               <PitchHistogram histCounts={histCounts} />
             </div>
           </div>

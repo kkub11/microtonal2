@@ -13,14 +13,14 @@ import ImportButton from './ImportButton'
 
 const BASE_HZ = 72
 
-export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, appState }) {
+export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, appState, initialWaveform = 'sine' }) {
   const engineRef        = useRef(null)
   const rafRef           = useRef(null)
   const totalDurationRef = useRef(0)   // ref so rAF closure always reads latest value
   const prevTempoRef     = useRef(1.0) // tracks previous tempoScale for position conversion
 
   const [selectedIdx,    setSelectedIdx]    = useState(0)
-  const [waveform,       setWaveform]       = useState('sine')
+  const [waveform,       setWaveform]       = useState(initialWaveform ?? 'sine')
   const [tempoScale,     setTempoScale]     = useState(1.0)
   const [isPlaying,      setIsPlaying]      = useState(false)
   const [masterGain,     setMasterGain]     = useState(0.7)

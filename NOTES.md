@@ -27,6 +27,43 @@ The user finds the musical sweet spot by ear, not by reading graphs.
 **Start simple:** implement the simplest version of each feature first.
 Jim's advice: "Start simple is good!"
 
+## Interface (redesign, 2026-11-14, branch `new-interface`)
+
+Three top-level views (`App.jsx`, `view` state; Presets is the default):
+
+- **Presets** (`src/components/PresetPicker.jsx`) — the front door. Five
+  built-in presets (`src/utils/presets.js`, `BUILTIN_PRESETS`), each a
+  whole recipe from a render that was actually heard: Happy (G1),
+  Calm (G2), Storyteller (H4: Ode to Joy motif + transposed Term 4),
+  Chorale (E3: shared rhythm), Solo (E1). Each card has a plain-language
+  blurb and fact chips; "Use this preset" applies it and opens Make
+  music. Applying a preset starts a fresh piece (snapshots are cleared)
+  and sets the panels' initial waveform (F2/F7 — the recipe's sound —
+  instead of the default sine).
+- **Make music** — the simplified compose screen: `CompositionPanel`
+  with `simple` (tuning cards hidden; the motif / two-phase cards still
+  show when switched on) + `OutputPanel`, stacked, so one screen covers
+  Start → cool → snapshot → play/export. Plain-language hints sit under
+  Energy ("Lower means more settled…") and Pitch Distribution. The
+  preset's snapshot hint shows at the top ("Cool slowly to about T20…").
+- **Advanced** — the original six-step flow, unchanged.
+
+Import/export: the human-readable text export (Step 6, `settingsExport.js`)
+is untouched. Presets and the new .json buttons use a machine-readable
+JSON file (`{ app, version, name?, settings, waveform? }`,
+`serializeSettingsFile` / `parseSettingsFile` in `presets.js`); the
+parser is lenient (bare settings objects accepted, missing fields filled
+from `DEFAULT_SETTINGS`, malformed commas dropped). User presets are
+saved in localStorage (`microtonal2.userPresets.v1`, in-memory fallback
+when localStorage is unavailable) and can be deleted from their card.
+"Save current settings as a preset" captures the App state via
+`settingsFromState`.
+
+Deferred from this redesign (Kanon's call, 2026-11-14): the 3-D cube
+visualisation (later: grids stay under Advanced, cube becomes the main
+view). The preset screen is designed touch + desktop; the Advanced
+panels stay desktop-first.
+
 ---
 
 ## Core Concepts (read before touching any algorithm code)
