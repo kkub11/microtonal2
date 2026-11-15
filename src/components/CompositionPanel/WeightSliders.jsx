@@ -36,6 +36,20 @@ export default function WeightSliders({ weights, onChange }) {
         max={10}
         onChange={set('jumpWeight')}
       />
+      <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+        <input
+          type="checkbox"
+          checked={weights.jumpByInterval ?? false}
+          onChange={e => set('jumpByInterval')(e.target.checked)}
+          className="mt-0.5 w-4 h-4 rounded accent-violet-600 cursor-pointer"
+        />
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Cost leaps by interval (Jim&apos;s Term 3): a leap costs its size
+          times how dissonant the interval is, so a consonant octave can
+          be cheaper than a dissonant step. Much stronger than size-only —
+          with it on, try the Jump weight near 0.5 instead of 5.
+        </span>
+      </label>
       <Slider
         label="Thematic weight"
         hint="long-range phrase match"

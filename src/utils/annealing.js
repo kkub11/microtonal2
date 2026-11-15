@@ -78,18 +78,26 @@ export function transposedMatchCost(p, prev, partnerPitch, partnerPrev, N, costT
   return thematicWeight * costTable[p * N + expected]
 }
 
-// Cost of a melodic step of d scale degrees, × jumpWeight. U-shaped:
+// Cost of a melodic step of d scale degrees, × jumpWeight. U-shaped
+// (size only) by default; with intervalCost given (Jim's original
+// Term 3, behind the "Cost leaps by interval" checkbox) the leap
+// costs distance × interval dissonance instead:
 //   d = 0 (repeat the note) → repeatCost (default 2.0; measured on
 //   53-EDO MOS7 at T20: repeats 27% at 0.5, 23% at 1.0, 18% at 2.0,
 //   with stepwise motion rising 34% → 38% → 42% and entropy ~2.1 throughout)
 //   d = 1 (step to a neighbouring degree) → 0 — steps are the cheapest motion
 //   d ≥ 2 → d - 1 — leaps grow linearly
-// A purely linear penalty made repeats the cheapest escape (cost 0), so
-// lines degenerated into long runs of one note; the U-shape makes stepwise
-// motion the preferred motion instead, with repeats and small leaps as
-// the next-cheapest options.
-export function sequentialStepCost(stepDistance, jumpWeight, repeatCost = 2.0) {
+//   d ≥ 1, by interval → d × intervalCost — a consonant octave leap
+//   can be cheaper than a dissonant step.
+// The repeat arm is kept in both forms: Jim's literal formula gives
+// repeats cost 0 (d = 0), which is the collapse the U-shape was built
+// to fix — a purely linear penalty made repeats the cheapest escape,
+// so lines degenerated into long runs of one note. The U-shape makes
+// stepwise motion the preferred motion instead, with repeats and
+// small leaps as the next-cheapest options.
+export function sequentialStepCost(stepDistance, jumpWeight, repeatCost = 2.0, intervalCost = null) {
   if (stepDistance === 0) return jumpWeight * repeatCost
+  if (intervalCost != null) return jumpWeight * stepDistance * intervalCost
   if (stepDistance === 1) return 0
   return jumpWeight * (stepDistance - 1)
 }
@@ -101,6 +109,10 @@ export function sequentialStepCost(stepDistance, jumpWeight, repeatCost = 2.0) {
 //   Without it a note's immediate neighbours in time were only 1 of its 6
 //   hypercube neighbours, so lines leapt freely even when the harmony was
 //   consonant.
+//   Off (default): leaps cost by size alone.
+//   On (jumpByInterval): Jim's original — a leap costs its size times the
+//   interval cost, so a consonant octave can beat a dissonant step.
+//   Repeats keep the U-shape's penalty in both forms (see above).
 // Term 4 (thematicWeight): phrase-similarity penalty over the
 // long-range hypercube neighbours (dims other than the voice dim and
 // the sequential last dim) — the notes a section away, i.e. the same
@@ -117,6 +129,7 @@ export function computeNoteCost(idx, pitch, scoreArray, shape, strides, N, costT
   const jumpWeight = weights?.jumpWeight ?? 0.0
   const thematicWeight = weights?.thematicWeight ?? 0.0
   const thematicTransposed = weights?.thematicTransposed ?? false
+  const jumpByInterval = weights?.jumpByInterval ?? false
   const repeatCost = weights?.repeatCost ?? 2.0
 
   let cost = 0
@@ -132,9 +145,11 @@ export function computeNoteCost(idx, pitch, scoreArray, shape, strides, N, costT
   cost += rangeWeight * dist * dist
 
   // Term 3 — sequential (melodic) neighbours, U-shaped step cost
+  // (or Jim's interval-modulated form when jumpByInterval is on)
   if (jumpWeight !== 0) {
     for (const ni of getSequentialNeighbors(idx, shape, strides)) {
-      cost += sequentialStepCost(Math.abs(pitch - scoreArray[ni]), jumpWeight, repeatCost)
+      const intervalCost = jumpByInterval ? costTable[pitch * N + scoreArray[ni]] : null
+      cost += sequentialStepCost(Math.abs(pitch - scoreArray[ni]), jumpWeight, repeatCost, intervalCost)
     }
   }
 
@@ -195,6 +210,7 @@ export function computeTotalCost(scoreArray, shape, strides, N, costTable, voice
   const jumpWeight = weights?.jumpWeight ?? 0.0
   const thematicWeight = weights?.thematicWeight ?? 0.0
   const thematicTransposed = weights?.thematicTransposed ?? false
+  const jumpByInterval = weights?.jumpByInterval ?? false
   const repeatCost = weights?.repeatCost ?? 2.0
   let total = 0
 
@@ -220,7 +236,10 @@ export function computeTotalCost(scoreArray, shape, strides, N, costTable, voice
     // voice, so every sequential edge is counted exactly once)
     if (jumpWeight !== 0) {
       const [, next] = getSequentialNeighbors(idx, shape, strides)
-      if (next !== undefined) total += sequentialStepCost(Math.abs(p - scoreArray[next]), jumpWeight, repeatCost)
+      if (next !== undefined) {
+        const intervalCost = jumpByInterval ? costTable[p * N + scoreArray[next]] : null
+        total += sequentialStepCost(Math.abs(p - scoreArray[next]), jumpWeight, repeatCost, intervalCost)
+      }
     }
 
     // Term 4 — the simple form counts only +1 neighbours (the rule is

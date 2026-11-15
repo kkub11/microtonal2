@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS = {
   voiceCount: 3,
   voiceSettings: [{ centerHz: 131 }, { centerHz: 196 }, { centerHz: 294 }],
   cubeDims: [6, 6, 6],
-  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5, thematicTransposed: false },
+  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5, thematicTransposed: false, jumpByInterval: false },
   motif: { enabled: false, source: 'preset', presetId: 'beethoven5', customDegrees: [] },
   twoPhase: { enabled: false },
   rhythmSettings: {
@@ -91,7 +91,7 @@ function fullRhythm(overrides) {
 
 const BASE_WEIGHTS = {
   rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5,
-  thematicTransposed: false, repeatCost: 2.0,
+  thematicTransposed: false, jumpByInterval: false, repeatCost: 2.0,
 }
 
 export const BUILTIN_PRESETS = [
@@ -267,6 +267,7 @@ export function validateSettings(input) {
       }
     }
     if (w.thematicTransposed !== undefined) out.thematicTransposed = !!w.thematicTransposed
+    if (w.jumpByInterval !== undefined) out.jumpByInterval = !!w.jumpByInterval
     s.weights = out
   }
   if (input.motif !== undefined) {

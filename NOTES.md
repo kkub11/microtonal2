@@ -430,6 +430,26 @@ modulated this by the interval cost
 octave leap could beat a dissonant half-step); the U-shaped form was
 chosen because its effect is directly measurable.
 
+Jim's interval-modulated form (IMPLEMENTED 2026-11-15, branch
+`new-interface`, behind the "Cost leaps by interval" checkbox under
+the Jump slider, off by default): when on, a leap of d ≥ 1 costs
+`jumpWeight * d * costTable[p][prevPitch]` instead of
+`jumpWeight * (d − 1)`; the same Jump weight applies, and the flag
+flows to the worker through the weights object (no worker change).
+Deliberate deviation: repeats keep the U-shape's penalty
+(`jumpWeight * repeatCost`) in both forms — Jim's literal formula
+gives repeats cost 0 (d = 0), which is the collapse the U-shape was
+built to fix. Measured on 53-EDO MOS7, T20, 3-seed averages
+(`exp15.mjs`; baseline flag off, jump 5, thematic 0.5: entropy 2.18,
+repeats 18%, steps 42%, leaps 40%): the flag makes the weight much
+stronger, because the interval cost multiplies it by ~2.5–32
+(median ~6). At jump 5 the piece freezes onto one note (entropy
+0.34, repeats 91%); at jump 2 it is still repetitive (45%); at
+jump 0.5 it matches the baseline's feel (entropy 2.02, repeats 25%,
+steps 28%, leaps 47%). Guidance in the checkbox note: with it on,
+start the Jump weight near 0.5 instead of 5. Presets are unaffected
+(the flag defaults off).
+
 **Term 4: Thematic similarity cost** (implemented as a first step toward
 Jim's phrase-matching design below)
   cost += thematicWeight for each long-range hypercube neighbour (dims

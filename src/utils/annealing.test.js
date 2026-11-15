@@ -9,6 +9,7 @@ import {
   computeNoteCost,
   computeTotalCost,
   pickPitch,
+  sequentialStepCost,
 } from './annealing'
 
 // Minimal 3-note scale cost table: 3×3 Float32Array.
@@ -343,5 +344,72 @@ describe('transposed Term 4 (thematicTransposed)', () => {
     }
     expect(computeTotalCost(arr, shape, strides, N3, table01, vs, w)).toBe(expectedTotal)
     expect(expectedTotal).toBeGreaterThan(0) // the test array is not trivially matched
+  })
+})
+
+describe('Jim Term 3 (jumpByInterval)', () => {
+  it('sequentialStepCost: interval form is distance × interval cost; repeat keeps its penalty', () => {
+    // Size-only form unchanged.
+    expect(sequentialStepCost(0, 1)).toBe(2)              // repeat: 1 × 2.0
+    expect(sequentialStepCost(1, 1)).toBe(0)              // step: free
+    expect(sequentialStepCost(2, 1)).toBe(1)              // leap of 2: 2 − 1
+    expect(sequentialStepCost(3, 2)).toBe(4)              // leap of 3, weight 2
+    // Interval form: repeats still cost repeatCost (Jim's literal
+    // formula gives them 0 — the collapse the U-shape was built to fix).
+    expect(sequentialStepCost(0, 1, 2.0, 10)).toBe(2)
+    // A step to a dissonant interval now costs: 1 × 1 × 10.
+    expect(sequentialStepCost(1, 1, 2.0, 10)).toBe(10)
+    // A leap of 2 to a consonant interval: 1 × 2 × 1 = 2 — cheaper
+    // than the dissonant step above. That is Jim's point.
+    expect(sequentialStepCost(2, 1, 2.0, 1)).toBe(2)
+  })
+
+  it('computeNoteCost: a consonant leap beats a dissonant step when the flag is on', () => {
+    const shape = [1, 4]
+    const strides = computeStrides(shape)
+    const arr = new Int16Array([0, 0, 0, 0])
+    const vs = [{ center: 0, range: 7 }]
+    // N=7 table: only the p→0 column matters (both sequential
+    // neighbours are pitch 0). p=1 (step) is dissonant (cost 10);
+    // p=2 (leap of 2) is consonant (cost 1). Term 1 (always on) reads
+    // the same entries, so the totals below are Term 1 + Term 3:
+    //   p=1 off: Term 1 10×2 + Term 3 0 = 20
+    //   p=2 off: Term 1 1×2 + Term 3 (2−1)×2 = 4
+    //   p=1 on:  Term 1 20 + Term 3 1×10×2 = 40
+    //   p=2 on:  Term 1 2 + Term 3 2×1×2 = 6
+    // The flag widens the leap's advantage (16 → 34): Term 3 itself
+    // now prefers the consonant leap (4) over the dissonant step (20).
+    const table = new Float32Array(49)
+    table[1 * 7 + 0] = 10
+    table[2 * 7 + 0] = 1
+    const wOff = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
+    const wOn = { ...wOff, jumpByInterval: true }
+    expect(computeNoteCost(1, 1, arr, shape, strides, 7, table, vs, wOff)).toBe(20)
+    expect(computeNoteCost(1, 2, arr, shape, strides, 7, table, vs, wOff)).toBe(4)
+    expect(computeNoteCost(1, 1, arr, shape, strides, 7, table, vs, wOn)).toBe(40)
+    expect(computeNoteCost(1, 2, arr, shape, strides, 7, table, vs, wOn)).toBe(6)
+    // Repeats keep the penalty in both forms: Term 1 is 0 (diagonal),
+    // Term 3 is 2.0 × 1 × 2 neighbours = 4.
+    expect(computeNoteCost(1, 0, arr, shape, strides, 7, table, vs, wOn)).toBe(4)
+    expect(computeNoteCost(1, 0, arr, shape, strides, 7, table, vs, wOff)).toBe(4)
+  })
+
+  it('computeTotalCost counts each interval-modulated edge once', () => {
+    const shape = [1, 4]
+    const strides = computeStrides(shape)
+    const vs = [{ center: 0, range: 3 }]
+    // N=3 table: 0→2 costs 5, 2→0 costs 7.
+    const table = new Float32Array(9)
+    table[0 * 3 + 2] = 5
+    table[2 * 3 + 0] = 7
+    const wOff = { rangeWeight: 0, jumpWeight: 1, thematicWeight: 0 }
+    const wOn = { ...wOff, jumpByInterval: true }
+    const arr = new Int16Array([0, 2, 0, 2])
+    // Term 1 (+1 neighbours only): 5 + 7 + 5 + 7 = 24 in both forms.
+    // Term 3 off: four leaps of 2 → (2−1) = 1 each = 4. Total 28.
+    expect(computeTotalCost(arr, shape, strides, 3, table, vs, wOff)).toBe(28)
+    // Term 3 on: edges 0→2 cost 2×5 = 10, edges 2→0 cost 2×7 = 14,
+    // two of each = 48. Total 24 + 48 = 72.
+    expect(computeTotalCost(arr, shape, strides, 3, table, vs, wOn)).toBe(72)
   })
 })

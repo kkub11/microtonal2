@@ -63,7 +63,7 @@ const initialState = {
   // U-shaped (sequentialStepCost): steps are free, repeats cost
   // repeatCost (2.0), leaps cost d-1 — so the escape hatch is stepping,
   // not repeating.
-  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5, thematicTransposed: false },
+  weights: { rangeWeight: 1.0, jumpWeight: 5.0, thematicWeight: 0.5, thematicTransposed: false, jumpByInterval: false },
   // motif seeding (off by default): { enabled, source: 'preset' | 'custom',
   // presetId, customDegrees } — degrees are scale degrees, so the motif
   // follows whatever scale is built
