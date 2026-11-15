@@ -225,14 +225,14 @@ export default function App() {
                   aria-selected={view === v.id}
                   onClick={() => setView(v.id)}
                   className={view === v.id
-                    ? 'relative z-10 -mb-px px-4 py-2 text-sm font-medium rounded-t-xl border border-b-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100'
-                    : 'px-4 py-2 text-sm rounded-t-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}
+                    ? 'relative z-10 -mb-px px-4 py-2 text-sm font-medium rounded-tr-xl border border-b-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100'
+                    : 'px-4 py-2 text-sm rounded-tr-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}
                 >
                   {v.label}
                 </button>
               ))}
             </div>
-            <main className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4 sm:p-6">
+            <main className="border border-slate-200 dark:border-slate-800 rounded-xl rounded-tl-none bg-white dark:bg-slate-900 p-4 sm:p-6">
             {view === 'settings' && (
               <>
                 {/* Sub-tabs: Presets and Advanced share the Settings sheet,
@@ -245,14 +245,14 @@ export default function App() {
                       aria-selected={settingsTab === t.id}
                       onClick={() => setSettingsTab(t.id)}
                       className={settingsTab === t.id
-                        ? 'relative z-10 -mb-px px-3 py-1.5 text-sm font-medium rounded-t-lg border border-b-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100'
-                        : 'px-3 py-1.5 text-sm rounded-t-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}
+                        ? 'relative z-10 -mb-px px-3 py-1.5 text-sm font-medium rounded-tr-lg border border-b-0 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100'
+                        : 'px-3 py-1.5 text-sm rounded-tr-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}
                     >
                       {t.label}
                     </button>
                   ))}
                 </div>
-                <div className="border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 p-4 sm:p-5">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg rounded-tl-none bg-white dark:bg-slate-900 p-4 sm:p-5">
 
                 {settingsTab === 'presets' && (
                   <PresetPicker
