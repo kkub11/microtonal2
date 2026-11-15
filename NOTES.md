@@ -29,35 +29,50 @@ Jim's advice: "Start simple is good!"
 
 ## Interface (redesign, 2026-11-14, branch `new-interface`)
 
-Three top-level views (`App.jsx`, `view` state; Presets is the default):
+Two top-level tabs (`App.jsx`, `view` state):
 
-- **Presets** (`src/components/PresetPicker.jsx`) — the front door. Five
-  built-in presets (`src/utils/presets.js`, `BUILTIN_PRESETS`), each a
-  whole recipe from a render that was actually heard: Happy (G1),
-  Calm (G2), Storyteller (H4: Ode to Joy motif + transposed Term 4),
-  Chorale (E3: shared rhythm), Solo (E1). Each card has a plain-language
-  blurb and fact chips; "Use this preset" applies it and opens Make
-  music. Applying a preset starts a fresh piece (snapshots are cleared)
-  and sets the panels' initial waveform (F2/F7 — the recipe's sound —
-  instead of the default sine).
-- **Make music** — the simplified compose screen: `CompositionPanel`
-  with `simple` (tuning cards hidden; the motif / two-phase cards still
-  show when switched on) + `OutputPanel`, stacked, so one screen covers
-  Start → cool → snapshot → play/export. Plain-language hints sit under
-  Energy ("Lower means more settled…") and Pitch Distribution. The
-  preset's snapshot hint shows at the top ("Cool slowly to about T20…").
-- **Advanced** — the original six-step flow, unchanged.
+- **Settings** — where the initial settings are input. Two sub-tabs:
+  - **Presets** (`src/components/PresetPicker.jsx`) — the front door.
+    Five built-in presets (`src/utils/presets.js`, `BUILTIN_PRESETS`),
+    each a whole recipe from a render that was actually heard: Happy
+    (G1), Calm (G2), Storyteller (H4: Ode to Joy motif + transposed
+    Term 4), Chorale (E3: shared rhythm), Solo (E1). Each card has a
+    plain-language blurb and fact chips; "Use this preset" applies it
+    and opens Make music. Applying a preset starts a fresh piece
+    (snapshots are cleared) and sets the panels' initial waveform
+    (F2/F7 — the recipe's sound — instead of the default sine).
+  - **Advanced** — the original step flow, now five steps (Tuning,
+    Tonnetz, Scale, Cost, Compose). Step 5 holds the compose *settings*
+    only (shape, weights, motif, two-phase, rhythm); the run controls
+    and the Output step were removed — those live in Make Music.
+- **Make music** — the only place annealing runs and output plays:
+  `CompositionPanel` in `mode="run"` (run controls only; the tuning
+  cards are hidden and the motif/two-phase cards show only when on)
+  stacked with `OutputPanel`, so Start → cool → snapshot → play/export
+  happen on one screen. Plain-language hints sit under Energy ("Lower
+  means more settled…") and Pitch Distribution. The preset's snapshot
+  hint shows at the top ("Cool slowly to about T20…").
 
-Import/export: the human-readable text export (Step 6, `settingsExport.js`)
-is untouched. Presets and the new .json buttons use a machine-readable
-JSON file (`{ app, version, name?, settings, waveform? }`,
-`serializeSettingsFile` / `parseSettingsFile` in `presets.js`); the
-parser is lenient (bare settings objects accepted, missing fields filled
-from `DEFAULT_SETTINGS`, malformed commas dropped). User presets are
-saved in localStorage (`microtonal2.userPresets.v1`, in-memory fallback
-when localStorage is unavailable) and can be deleted from their card.
-"Save current settings as a preset" captures the App state via
-`settingsFromState`.
+Audio coordination (Make music has two engines — the live preview and
+the output player — and they must never sound together):
+- Pause stops the preview engine as well as the worker (2026-11-15
+  fix: pausing the worker alone left the preview looping the last clip).
+- Output Play mutes the preview (`previewMuted`, driven by the Output
+  panel's `onPlayingChange`); Output Stop resumes it if the run is
+  still going. A new run stops output playback (`stopRequest` counter).
+- Leaving Make Music unmounts both panels and clears the playing flag,
+  so a stale flag cannot mute a later run.
+
+Import/export: the human-readable text export (`settingsExport.js`,
+in the Output panel in Make Music) is untouched. Presets and the new
+.json buttons use a machine-readable JSON file (`{ app, version, name?,
+settings, waveform? }`, `serializeSettingsFile` / `parseSettingsFile`
+in `presets.js`); the parser is lenient (bare settings objects
+accepted, missing fields filled from `DEFAULT_SETTINGS`, malformed
+commas dropped). User presets are saved in localStorage
+(`microtonal2.userPresets.v1`, in-memory fallback when localStorage is
+unavailable) and can be deleted from their card. "Save current settings
+as a preset" captures the App state via `settingsFromState`.
 
 Deferred from this redesign (Kanon's call, 2026-11-14): the 3-D cube
 visualisation (later: grids stay under Advanced, cube becomes the main

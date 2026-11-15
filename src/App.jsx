@@ -1,4 +1,4 @@
-import { useReducer, useMemo, useState } from 'react'
+import { useReducer, useMemo, useState, useEffect } from 'react'
 import { Analytics } from '@vercel/analytics/react'
 import { computeTuningError } from './utils/edoUtils'
 import { computeCostTable } from './utils/costFunction'
@@ -13,16 +13,24 @@ import CostFunctionPanel from './components/CostFunctionPanel'
 import CompositionPanel from './components/CompositionPanel'
 import OutputPanel from './components/OutputPanel'
 
-const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose', 'Output']
-
-// Top-level views. Presets is the front door: pick a recipe and make
-// music. Advanced is the original six-step flow, unchanged. Make music
-// is the simplified compose screen for the active preset.
+// Two top-level tabs. Settings is where the initial settings are input:
+// Presets (the front door) and Advanced (the original step flow) swap
+// via a sub-tab. Make music is the only place annealing runs and
+// output plays — the run controls live there, nowhere else.
 const VIEWS = [
+  { id: 'settings', label: 'Settings' },
+  { id: 'compose', label: 'Make Music' },
+]
+const SETTINGS_TABS = [
   { id: 'presets', label: 'Presets' },
-  { id: 'compose', label: 'Make music' },
   { id: 'advanced', label: 'Advanced' },
 ]
+
+// Advanced is the settings steps only: step 5 holds the compose
+// *settings* (shape, weights, motif, two-phase, rhythm) — the run
+// controls (start, preview, graphs, temperature, snapshot) and the
+// output step were removed; those live in Make Music.
+const STEPS = ['Tuning', 'Tonnetz', 'Scale', 'Cost', 'Compose']
 
 const initialState = {
   currentStep: 1,
@@ -81,7 +89,6 @@ const initialState = {
     independentVoices: true,
   },
   snapshots: [],
-  // Step 6 populated as we build it
 }
 
 function reducer(state, action) {
@@ -118,7 +125,8 @@ function reducer(state, action) {
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const [view, setView] = useState('presets')
+  const [view, setView] = useState('settings')
+  const [settingsTab, setSettingsTab] = useState('presets')
   // The preset the current piece started from ({ id, name, snapshotHint })
   // — display only; fine-tuning in Advanced does not clear it.
   const [activePreset, setActivePreset] = useState(null)
@@ -126,6 +134,17 @@ export default function App() {
   // their initial waveform; changing it inside a panel stays local to
   // that panel until another preset is applied.
   const [presetWaveform, setPresetWaveform] = useState('sine')
+  // Audio coordination for Make Music: the Output panel reports when it
+  // is playing (the preview goes quiet), and a counter the App bumps on
+  // every run start (the Output panel stops its playback).
+  const [outputPlaying, setOutputPlaying] = useState(false)
+  const [stopOutputNonce, setStopOutputNonce] = useState(0)
+
+  // Leaving Make Music unmounts both panels (their cleanup stops the
+  // audio), so a stale "output playing" flag must not mute a later run.
+  useEffect(() => {
+    if (view !== 'compose') setOutputPlaying(false)
+  }, [view])
 
   const tuningErrors = useMemo(
     () => computeTuningError(state.edo, state.primes),
@@ -145,8 +164,14 @@ export default function App() {
   }
 
   function goFineTune() {
+    setSettingsTab('advanced')
     dispatch({ type: 'SET_STEP', payload: 5 })
-    setView('advanced')
+    setView('settings')
+  }
+
+  function goChangePreset() {
+    setSettingsTab('presets')
+    setView('settings')
   }
 
   const compositionProps = {
@@ -180,6 +205,8 @@ export default function App() {
     rhythmSettings: state.rhythmSettings,
     appState: state,
     initialWaveform: presetWaveform,
+    onPlayingChange: setOutputPlaying,
+    stopRequest: stopOutputNonce,
   }
 
   return (
@@ -187,7 +214,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
           <Header />
-          {/* Top-level navigation: presets first, Advanced last. */}
+          {/* Top-level navigation: Settings (input) and Make Music (run). */}
           <nav className="flex gap-1 pt-4" aria-label="Views">
             {VIEWS.map(v => (
               <button
@@ -205,13 +232,96 @@ export default function App() {
             ))}
           </nav>
           <main className="py-8">
-            {view === 'presets' && (
-              <PresetPicker
-                currentState={state}
-                currentWaveform={presetWaveform}
-                onApply={handleApplyPreset}
-                onGoAdvanced={() => setView('advanced')}
-              />
+            {view === 'settings' && (
+              <>
+                {/* Sub-tabs: Presets and Advanced share the Settings page. */}
+                <div className="flex gap-1 pb-6" role="tablist" aria-label="Settings">
+                  {SETTINGS_TABS.map(t => (
+                    <button
+                      key={t.id}
+                      role="tab"
+                      aria-selected={settingsTab === t.id}
+                      onClick={() => setSettingsTab(t.id)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        settingsTab === t.id
+                          ? 'bg-slate-200 dark:bg-slate-700 font-medium text-slate-900 dark:text-slate-100'
+                          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {settingsTab === 'presets' && (
+                  <PresetPicker
+                    currentState={state}
+                    currentWaveform={presetWaveform}
+                    onApply={handleApplyPreset}
+                    onGoAdvanced={() => setSettingsTab('advanced')}
+                  />
+                )}
+
+                {settingsTab === 'advanced' && (
+                  <>
+                    <WorkflowStepper
+                      steps={STEPS}
+                      currentStep={state.currentStep}
+                      onStepClick={(step) => dispatch({ type: 'SET_STEP', payload: step })}
+                    />
+                    <div className="py-8">
+                      {state.currentStep === 1 && (
+                        <TuningPanel
+                          edo={state.edo}
+                          primes={state.primes}
+                          tuningErrors={tuningErrors}
+                          onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
+                          onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
+                        />
+                      )}
+                      {state.currentStep === 3 && (
+                        <CommaScalePanel
+                          edo={state.edo}
+                          primes={state.primes}
+                          xInterval={state.xInterval}
+                          yInterval={state.yInterval}
+                          selectedComma={state.selectedComma}
+                          scale={state.scale}
+                          costParams={state.costParams}
+                          onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
+                          onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
+                          onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+                        />
+                      )}
+                      {state.currentStep === 5 && (
+                        <CompositionPanel {...compositionProps} mode="settings" />
+                      )}
+                      {state.currentStep === 4 && (
+                        <CostFunctionPanel
+                          scale={state.scale}
+                          edo={state.edo}
+                          costTable={costTable}
+                          costParams={state.costParams}
+                          onCostParamsChange={(p) => dispatch({ type: 'SET_COST_PARAMS', payload: p })}
+                          voiceCount={state.voiceCount}
+                          voiceSettings={state.voiceSettings}
+                          onVoiceSettingsChange={(vs) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: vs })}
+                        />
+                      )}
+                      {state.currentStep === 2 && (
+                        <TonnetzPanel
+                          edo={state.edo}
+                          primes={state.primes}
+                          xInterval={state.xInterval}
+                          yInterval={state.yInterval}
+                          onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
+                          onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             {view === 'compose' && (
@@ -227,12 +337,12 @@ export default function App() {
                   )}
                   {!state.scale && (
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      No preset picked yet — choose one on the Presets tab first.
+                      No preset picked yet — choose one in Settings first.
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button
-                      onClick={() => setView('presets')}
+                      onClick={goChangePreset}
                       className="px-3 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                     >
                       ← Change preset
@@ -248,7 +358,12 @@ export default function App() {
 
                 {state.scale ? (
                   <>
-                    <CompositionPanel {...compositionProps} simple />
+                    <CompositionPanel
+                      {...compositionProps}
+                      mode="run"
+                      previewMuted={outputPlaying}
+                      onRunStart={() => setStopOutputNonce(n => n + 1)}
+                    />
                     <OutputPanel {...outputProps} />
                   </>
                 ) : (
@@ -259,7 +374,7 @@ export default function App() {
                       Advanced.
                     </p>
                     <button
-                      onClick={() => setView('presets')}
+                      onClick={goChangePreset}
                       className="mt-3 px-4 py-2 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors"
                     >
                       Browse presets
@@ -267,69 +382,6 @@ export default function App() {
                   </div>
                 )}
               </div>
-            )}
-
-            {view === 'advanced' && (
-              <>
-                <WorkflowStepper
-                  steps={STEPS}
-                  currentStep={state.currentStep}
-                  onStepClick={(step) => dispatch({ type: 'SET_STEP', payload: step })}
-                />
-                <div className="py-8">
-                  {state.currentStep === 1 && (
-                    <TuningPanel
-                      edo={state.edo}
-                      primes={state.primes}
-                      tuningErrors={tuningErrors}
-                      onEdoChange={(edo) => dispatch({ type: 'SET_EDO', payload: edo })}
-                      onPrimesChange={(primes) => dispatch({ type: 'SET_PRIMES', payload: primes })}
-                    />
-                  )}
-                  {state.currentStep === 3 && (
-                    <CommaScalePanel
-                      edo={state.edo}
-                      primes={state.primes}
-                      xInterval={state.xInterval}
-                      yInterval={state.yInterval}
-                      selectedComma={state.selectedComma}
-                      scale={state.scale}
-                      costParams={state.costParams}
-                      onCommaChange={(comma) => dispatch({ type: 'SET_COMMA', payload: comma })}
-                      onScaleChange={(scale) => dispatch({ type: 'SET_SCALE', payload: scale })}
-                      onYIntervalChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
-                    />
-                  )}
-                  {state.currentStep === 5 && (
-                    <CompositionPanel {...compositionProps} />
-                  )}
-                  {state.currentStep === 4 && (
-                    <CostFunctionPanel
-                      scale={state.scale}
-                      edo={state.edo}
-                      costTable={costTable}
-                      costParams={state.costParams}
-                      onCostParamsChange={(p) => dispatch({ type: 'SET_COST_PARAMS', payload: p })}
-                      voiceCount={state.voiceCount}
-                      voiceSettings={state.voiceSettings}
-                      onVoiceSettingsChange={(vs) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: vs })}
-                    />
-                  )}
-                  {state.currentStep === 2 && (
-                    <TonnetzPanel
-                      edo={state.edo}
-                      primes={state.primes}
-                      xInterval={state.xInterval}
-                      yInterval={state.yInterval}
-                      onXChange={(interval) => dispatch({ type: 'SET_X_INTERVAL', payload: interval })}
-                      onYChange={(interval) => dispatch({ type: 'SET_Y_INTERVAL', payload: interval })}
-                    />
-                  )}
-                  {state.currentStep === 6 && (
-                    <OutputPanel {...outputProps} />
-                  )}
-                </div>
-              </>
             )}
           </main>
         </div>

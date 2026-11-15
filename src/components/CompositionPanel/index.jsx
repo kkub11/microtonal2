@@ -35,12 +35,17 @@ export default function CompositionPanel({
   selectedComma, xInterval, yInterval,
   rhythmSettings, onRhythmSettingsChange,
   snapshots, onSnapshotAdd,
-  // simple: the Make-music view — hide the tuning cards (shape, weights,
-  // rhythm) and show only what is live for this piece. The motif and
-  // two-phase cards still show when they are switched on, so the user
-  // can see (and drive) them.
-  simple = false,
+  // mode: 'run' — the Make-music screen (run controls only; the tuning
+  // cards are hidden and the motif/two-phase cards show only when on).
+  // 'settings' — Advanced step 5 (tuning cards only, no run controls).
+  mode = 'run',
   initialWaveform = 'sine',
+  // Audio coordination (run mode only): the Output panel reports when it
+  // is playing, and the preview goes quiet while it does — the two
+  // engines must never sound at once. onRunStart fires when a run
+  // starts, so the Output panel can stop its playback.
+  previewMuted = false,
+  onRunStart,
 }) {
   const workerRef           = useRef(null)
   const audioRef            = useRef(null)
@@ -128,6 +133,18 @@ export default function CompositionPanel({
     }, 100)
     return () => clearInterval(id)
   }, [autoCool, status, coolRate])
+
+  // ─── Preview muting (audio coordination) ─────────────────────────────────
+  // While the Output panel is playing its snapshot, the live preview
+  // must be silent — the two engines would otherwise sound together.
+  // When the output stops, the preview resumes if the run is still going.
+  useEffect(() => {
+    if (previewMuted) {
+      stopPreview()
+    } else if (previewOn && isAnnealingRef.current && status === 'running') {
+      startPreviewLoop()
+    }
+  }, [previewMuted]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => () => {
@@ -285,6 +302,8 @@ export default function CompositionPanel({
     setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
     setProgress({ totalCost: null, iteration: 0 })
+    // A new run takes the speakers: tell the Output panel to stop.
+    onRunStart?.()
   }
 
   function handleStart() {
@@ -322,10 +341,14 @@ export default function CompositionPanel({
   function handlePauseResume() {
     if (status === 'running') {
       workerRef.current?.postMessage({ type: 'PAUSE' })
+      // Pausing must silence the preview too: pausing the worker alone
+      // leaves the audio engine looping the last clip.
+      stopPreview()
       setStatus('paused')
     } else {
       workerRef.current?.postMessage({ type: 'RESUME' })
       setStatus('running')
+      if (previewOn && !previewMuted) startPreviewLoop()
     }
   }
 
@@ -372,9 +395,40 @@ export default function CompositionPanel({
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
+  // The motif / two-phase cards are shared by both modes: in settings mode
+  // they are always shown (that is where they get switched on); in run
+  // mode only when switched on.
+  const motifCard = (
+    <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+        Motif Seeding
+      </label>
+      <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
+    </div>
+  )
+  const twoPhaseCard = (
+    <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+        Two-Phase Mode
+      </label>
+      <TwoPhaseMode
+        enabled={twoPhase?.enabled ?? false}
+        onToggle={handleTwoPhaseToggle}
+        phase={phase}
+        tTransition={tTransition}
+        commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
+        seedSource={phase2SeedSource}
+        motifName={motifName}
+        isRunning={status === 'running'}
+        onStartPhase2={handleStartPhase2}
+        onSetTransitionHere={handleSetTransitionHere}
+      />
+    </div>
+  )
+
   return (
     <div className="space-y-4">
-      {!simple && (
+      {mode === 'settings' && (
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
           Step 5 — Compose
         </h2>
@@ -388,65 +442,42 @@ export default function CompositionPanel({
         </div>
       )}
 
-      {ready && (
+      {ready && mode === 'settings' && (
         <>
-          {/* ── Settings (Advanced only) ── */}
-          {!simple && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  System Shape
-                </label>
-                <ArrayShapeSelector cubeDims={cubeDims} onChange={onCubeDimsChange} />
-                <VoiceCountSelector voiceCount={voiceCount} onChange={onVoiceCountChange} />
-              </div>
-
-              <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Annealing Weights
-                </label>
-                <WeightSliders weights={weights} onChange={handleWeights} />
-              </div>
-            </div>
-          )}
-
-          {(!simple || motif?.enabled) && (
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                Motif Seeding
+          {/* ── Tuning cards only — no run controls in Advanced ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                System Shape
               </label>
-              <MotifSeeding motif={motif} onChange={handleMotif} scale={scale} edo={edo} />
+              <ArrayShapeSelector cubeDims={cubeDims} onChange={onCubeDimsChange} />
+              <VoiceCountSelector voiceCount={voiceCount} onChange={onVoiceCountChange} />
             </div>
-          )}
 
-          {(!simple || twoPhase?.enabled) && (
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                Two-Phase Mode
+            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Annealing Weights
               </label>
-              <TwoPhaseMode
-                enabled={twoPhase?.enabled ?? false}
-                onToggle={handleTwoPhaseToggle}
-                phase={phase}
-                tTransition={tTransition}
-                commaName={selectedComma ? getCommaName(selectedComma.monzo) : null}
-                seedSource={phase2SeedSource}
-                motifName={motifName}
-                isRunning={status === 'running'}
-                onStartPhase2={handleStartPhase2}
-                onSetTransitionHere={handleSetTransitionHere}
-              />
+              <WeightSliders weights={weights} onChange={handleWeights} />
             </div>
-          )}
+          </div>
 
-          {!simple && (
-            <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                Rhythm Settings
-              </label>
-              <RhythmSettings rhythmSettings={rhythmSettings} onChange={onRhythmSettingsChange} />
-            </div>
-          )}
+          {motifCard}
+          {twoPhaseCard}
+
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              Rhythm Settings
+            </label>
+            <RhythmSettings rhythmSettings={rhythmSettings} onChange={onRhythmSettingsChange} />
+          </div>
+        </>
+      )}
+
+      {ready && mode === 'run' && (
+        <>
+          {motif?.enabled && motifCard}
+          {twoPhase?.enabled && twoPhaseCard}
 
           {/* ── Start + Audio Preview ── */}
           <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
@@ -508,12 +539,10 @@ export default function CompositionPanel({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Energy
               </label>
-              {simple && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
-                  Lower means more settled. Watch for the sharp drop — that
-                  is where the music finds its shape.
-                </p>
-              )}
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                Lower means more settled. Watch for the sharp drop — that
+                is where the music finds its shape.
+              </p>
               <EnergyDisplay progress={progress} energyBuckets={energyBuckets} />
             </div>
 
@@ -521,12 +550,10 @@ export default function CompositionPanel({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Pitch Distribution
               </label>
-              {simple && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
-                  Which notes the piece is using right now. A few tall bars
-                  means it has found its home notes.
-                </p>
-              )}
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                Which notes the piece is using right now. A few tall bars
+                means it has found its home notes.
+              </p>
               <PitchHistogram histCounts={histCounts} />
             </div>
           </div>

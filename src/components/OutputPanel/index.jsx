@@ -13,7 +13,12 @@ import ImportButton from './ImportButton'
 
 const BASE_HZ = 72
 
-export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, appState, initialWaveform = 'sine' }) {
+export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, appState, initialWaveform = 'sine',
+  // Audio coordination (Make-music view): the panel reports when it is
+  // playing, so the live preview can go quiet, and stops its playback
+  // when a new annealing run starts (stopRequest is a counter the App
+  // bumps on every run start).
+  onPlayingChange, stopRequest = 0 }) {
   const engineRef        = useRef(null)
   const rafRef           = useRef(null)
   const totalDurationRef = useRef(0)   // ref so rAF closure always reads latest value
@@ -84,6 +89,12 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
   // Keep ref in sync so the rAF closure always reads the latest value
   totalDurationRef.current = totalDuration
 
+  // A new annealing run starting in Make music stops output playback —
+  // the live preview takes over the speakers.
+  useEffect(() => {
+    if (stopRequest > 0) handleStop()
+  }, [stopRequest]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── AudioEngine helpers ───────────────────────────────────────────────────
 
   function getEngine() {
@@ -102,6 +113,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
       engineRef.current?.scheduleAhead()   // keep rolling lookahead window filled
       if (total > 0 && pos >= total) {
         setIsPlaying(false)
+        onPlayingChange?.(false)
         setPlaybackPos(0)
         rafRef.current = null
         return
@@ -128,6 +140,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
       seekFrom,
     })
     setIsPlaying(true)
+    onPlayingChange?.(true)
     startRaf()
   }
 
@@ -135,6 +148,7 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
     stopRaf()
     engineRef.current?.stop()
     setIsPlaying(false)
+    onPlayingChange?.(false)
     setPlaybackPos(0)
   }
 
