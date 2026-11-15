@@ -31,7 +31,7 @@ Jim's advice: "Start simple is good!"
 
 Two top-level tabs (`App.jsx`, `view` state):
 
-- **Settings** — where the initial settings are input. Two sub-tabs:
+- **Settings** — where the initial settings are input. Three sub-tabs:
   - **Presets** (`src/components/PresetPicker.jsx`) — the front door.
     Five built-in presets (`src/utils/presets.js`, `BUILTIN_PRESETS`),
     each a whole recipe from a render that was actually heard: Happy
@@ -41,10 +41,19 @@ Two top-level tabs (`App.jsx`, `view` state):
     and opens Make music. Applying a preset starts a fresh piece
     (snapshots are cleared) and sets the panels' initial waveform
     (F2/F7 — the recipe's sound — instead of the default sine).
+    User-saved presets appear here too, under "Your presets".
   - **Advanced** — the original step flow, now five steps (Tuning,
     Tonnetz, Scale, Cost, Compose). Step 5 holds the compose *settings*
     only (shape, weights, motif, two-phase, rhythm); the run controls
     and the Output step were removed — those live in Make Music.
+  - **Save Settings** (`src/components/SaveSettings.jsx`) — keeping a
+    recipe: save the current settings as a named preset (stored in
+    this browser, listed under "Your presets" on the Presets tab),
+    export the current settings as a .json file to share or keep a
+    copy, or import a .json recipe. The .json format is the
+    machine-readable one (`serializeSettingsFile` /
+    `parseSettingsFile`); the human-readable text export is in Make
+    Music, under Output.
 - **Make music** — the only place annealing runs and output plays:
   `CompositionPanel` in `mode="run"` (run controls only; the tuning
   cards are hidden and the motif/two-phase cards show only when on)

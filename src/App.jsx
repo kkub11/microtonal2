@@ -6,6 +6,7 @@ import { SETTINGS_KEYS } from './utils/presets'
 import Header from './components/Header'
 import WorkflowStepper from './components/WorkflowStepper'
 import PresetPicker from './components/PresetPicker'
+import SaveSettings from './components/SaveSettings'
 import TuningPanel from './components/TuningPanel'
 import TonnetzPanel from './components/TonnetzPanel'
 import CommaScalePanel from './components/CommaScalePanel'
@@ -24,6 +25,7 @@ const VIEWS = [
 const SETTINGS_TABS = [
   { id: 'presets', label: 'Presets' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'save', label: 'Save Settings' },
 ]
 
 // Advanced is the settings steps only: step 5 holds the compose
@@ -255,11 +257,14 @@ export default function App() {
                 <div className="border border-slate-200 dark:border-slate-800 rounded-lg rounded-tl-none bg-white dark:bg-slate-900 p-4 sm:p-5">
 
                 {settingsTab === 'presets' && (
-                  <PresetPicker
+                  <PresetPicker onApply={handleApplyPreset} />
+                )}
+
+                {settingsTab === 'save' && (
+                  <SaveSettings
                     currentState={state}
                     currentWaveform={presetWaveform}
                     onApply={handleApplyPreset}
-                    onGoAdvanced={() => setSettingsTab('advanced')}
                   />
                 )}
 
