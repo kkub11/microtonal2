@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { generateSimpleRhythm, generateFullRhythm } from './rhythmUtils.js'
+import { generateSimpleRhythm, generateFullRhythm, buildRhythmPerVoice } from './rhythmUtils.js'
 
 describe('generateSimpleRhythm', () => {
   test('returns numMeasures * divisor events', () => {
@@ -191,5 +191,61 @@ describe('generateFullRhythm maxNoteSec (join cap)', () => {
       maxDepth: 4, measureJitter: 0.4, maxNoteSec: 2.0,
     })
     expect(maxDur(events)).toBeLessThanOrEqual(2.0 + 1e-9)
+  })
+})
+
+// ── buildRhythmPerVoice ─────────────────────────────────────────────────
+
+describe('buildRhythmPerVoice', () => {
+  const fullSettings = {
+    mode: 'full', measureSec: 3.0, allowedDivisors: [2, 3, 4],
+    minNoteSec: 0.5, restProb: 0.2, joinProb: 0.5,
+    capLongNotes: true, measureJitter: 0, independentVoices: true,
+  }
+
+  test('one rhythm per voice, each non-empty and time-ordered', () => {
+    const rhythms = buildRhythmPerVoice([3, 4, 4, 4], fullSettings)
+    expect(rhythms).toHaveLength(3)
+    for (const r of rhythms) {
+      expect(r.length).toBeGreaterThan(0)
+      for (let i = 1; i < r.length; i++) expect(r[i].startSec).toBeGreaterThanOrEqual(r[i - 1].startSec)
+    }
+  })
+
+  test('total duration is numMeasures * measureSec (no jitter)', () => {
+    const rhythms = buildRhythmPerVoice([2, 4, 4], fullSettings)
+    const total = Math.max(...rhythms[0].map(e => e.startSec + e.durationSec))
+    expect(total).toBeCloseTo(16 * 3.0, 6)
+  })
+
+  test('independentVoices off: all voices share the same array', () => {
+    const rhythms = buildRhythmPerVoice([3, 2, 2], { ...fullSettings, independentVoices: false })
+    expect(rhythms[0]).toBe(rhythms[1])
+    expect(rhythms[1]).toBe(rhythms[2])
+  })
+
+  test('independentVoices on: voices get different arrays', () => {
+    const rhythms = buildRhythmPerVoice([3, 2, 2], fullSettings)
+    expect(rhythms[0]).not.toBe(rhythms[1])
+  })
+
+  test('simple mode: strict grid, divisor slots per measure', () => {
+    const rhythms = buildRhythmPerVoice(
+      [2, 2, 2],
+      { mode: 'simple', measureSec: 1.0, divisor: 4 }
+    )
+    expect(rhythms).toHaveLength(2)
+    expect(rhythms[0]).toHaveLength(4 * 4)
+    expect(rhythms[0].slice(0, 4).map(e => e.durationSec)).toEqual([0.25, 0.25, 0.25, 0.25])
+    expect(rhythms[0].every(e => !e.isRest)).toBe(true)
+  })
+
+  test('join cap applies in full mode (no note over 2 s by default)', () => {
+    const rhythms = buildRhythmPerVoice(
+      [1, 4, 4],
+      { ...fullSettings, measureSec: 4.0, joinProb: 0.9 }
+    )
+    const maxDur = Math.max(...rhythms[0].map(e => e.durationSec))
+    expect(maxDur).toBeLessThanOrEqual(2.0 + 1e-9)
   })
 })

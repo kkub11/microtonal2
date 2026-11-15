@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
 import { AudioEngine as AudioEngineClass, buildNoteEvents, F_TABLES } from '../../utils/audioEngine'
-import { generateSimpleRhythm, generateFullRhythm, DEFAULT_MAX_NOTE_SEC } from '../../utils/rhythmUtils'
+import { buildRhythmPerVoice } from '../../utils/rhythmUtils'
 import { importCSound } from '../../utils/csoundIO'
 import SnapshotSelector from './SnapshotSelector'
 import FoldedScore from './FoldedScore'
@@ -41,32 +41,11 @@ export default function OutputPanel({ snapshots, onSnapshotAdd, rhythmSettings, 
     if (importedEvents) return importedEvents
     if (!selectedSnapshot?.scoreArray) return []
     const { scoreArray, scoreShape, scale, edo } = selectedSnapshot
-    const numMeasures = scoreShape.slice(1).reduce((a, b) => a * b, 1)
-    const numVoices   = scoreShape[0]
 
-    let rhythmPerVoice
-    if (rhythmSettings.mode === 'full') {
-      const fullOpts = {
-        allowedDivisors: rhythmSettings.allowedDivisors,
-        minNoteSec:      rhythmSettings.minNoteSec,
-        restProb:        rhythmSettings.restProb,
-        joinProb:        rhythmSettings.joinProb,
-        maxNoteSec:       (rhythmSettings.capLongNotes ?? true) ? DEFAULT_MAX_NOTE_SEC : undefined,
-        measureJitter:   rhythmSettings.measureJitter ?? 0,
-      }
-      if (rhythmSettings.independentVoices) {
-        rhythmPerVoice = Array.from({ length: numVoices }, () =>
-          generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts)
-        )
-      } else {
-        const shared = generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts)
-        rhythmPerVoice = Array.from({ length: numVoices }, () => shared)
-      }
-    } else {
-      rhythmPerVoice = Array.from({ length: numVoices }, () =>
-        generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor)
-      )
-    }
+    // One timeline shared with the live preview (same helper) — the
+    // render and the preview differ only in that the render's pitches
+    // are frozen at snapshot time.
+    const rhythmPerVoice = buildRhythmPerVoice(scoreShape, rhythmSettings)
 
     return buildNoteEvents(scoreArray, scoreShape, scale, edo, rhythmPerVoice, BASE_HZ, null, selectedSnapshot.voiceSettings)
   }, [importedEvents, selectedSnapshot, rhythmSettings])

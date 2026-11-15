@@ -72,6 +72,24 @@ the output player — and they must never sound together):
 - Leaving Make Music unmounts both panels and clears the playing flag,
   so a stale flag cannot mute a later run.
 
+Streaming preview (2026-11-15, branch `new-interface`): the preview
+is one playhead walking the whole piece in order and wrapping — not
+the old 4-second clip of the opening on a fixed metronomic grid,
+rebuilt and restarted every 4 s. The rhythm is built once per run
+from the user's actual rhythm settings (`buildRhythmPerVoice` in
+`rhythmUtils.js`, the same helper the Output panel uses, so the
+preview and the final render share one timeline); only the pitches
+move, refreshed from the live score every 5 s via
+`AudioEngine.refreshEvents()`, which swaps the not-yet-scheduled
+tail without stopping anything already playing. The RAF loop calls
+`engine.scheduleAhead()` every tick (start() only schedules the
+first 10 s). Pause / mute / waveform changes remember the playhead
+position and resume from it. A position readout ("0:42 / 3:12") sits
+in the preview card, throttled to twice a second. The rhythm is
+fixed per run: changing rhythm settings applies to the next run
+(they live in Advanced, which has no run controls, so this never
+surprises anyone mid-run).
+
 Import/export: the human-readable text export (`settingsExport.js`,
 in the Output panel in Make Music) is untouched. Presets and the new
 .json buttons use a machine-readable JSON file (`{ app, version, name?,

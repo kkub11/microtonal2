@@ -1,4 +1,41 @@
 /**
+ * One rhythm per voice for a whole piece — the same construction the
+ * Output panel uses, so the live preview and the final render share
+ * one timeline. numMeasures = product of the cube dims (score slots
+ * per voice); the rhythm is longer than one score pass, and pitches
+ * wrap (k % numScoreSlots) exactly as in buildNoteEvents.
+ *
+ * @param {number[]} scoreShape  [voiceCount, d1, d2, ...]
+ * @param {object} rhythmSettings  App rhythm settings (mode, measureSec,
+ *   divisor / allowedDivisors, minNoteSec, restProb, joinProb,
+ *   capLongNotes, measureJitter, independentVoices)
+ * @returns {object[][]} one rhythm (event list) per voice; when
+ *   independentVoices is off the voices share one array.
+ */
+export function buildRhythmPerVoice(scoreShape, rhythmSettings) {
+  const numMeasures = scoreShape.slice(1).reduce((a, b) => a * b, 1)
+  const numVoices = scoreShape[0]
+  if (rhythmSettings.mode === 'full') {
+    const fullOpts = {
+      allowedDivisors: rhythmSettings.allowedDivisors,
+      minNoteSec:      rhythmSettings.minNoteSec,
+      restProb:        rhythmSettings.restProb,
+      joinProb:        rhythmSettings.joinProb,
+      maxNoteSec:      (rhythmSettings.capLongNotes ?? true) ? DEFAULT_MAX_NOTE_SEC : undefined,
+      measureJitter:   rhythmSettings.measureJitter ?? 0,
+    }
+    if (rhythmSettings.independentVoices) {
+      return Array.from({ length: numVoices }, () =>
+        generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts))
+    }
+    const shared = generateFullRhythm(numMeasures, rhythmSettings.measureSec, fullOpts)
+    return Array.from({ length: numVoices }, () => shared)
+  }
+  return Array.from({ length: numVoices }, () =>
+    generateSimpleRhythm(numMeasures, rhythmSettings.measureSec, rhythmSettings.divisor))
+}
+
+/**
  * Simple rhythm: one event per score-array slot, all equal duration.
  * @param {number} numMeasures - Number of rhythmic measures (= d1×d2×…×dn / divisor)
  * @param {number} measureSec - Duration of each rhythmic measure in seconds

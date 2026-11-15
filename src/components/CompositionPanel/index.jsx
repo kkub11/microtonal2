@@ -15,14 +15,22 @@ import StartStopButton from './StartStopButton'
 import SnapshotButton from './SnapshotButton'
 import SnapshotList from './SnapshotList'
 import { AudioEngine as AudioEngineClass, buildNoteEvents, F_TABLES } from '../../utils/audioEngine'
-import { generateSimpleRhythm } from '../../utils/rhythmUtils'
+import { buildRhythmPerVoice } from '../../utils/rhythmUtils'
 import WaveformSelector from '../OutputPanel/WaveformSelector'
 
-const PREVIEW_MEASURES    = 4
-const PREVIEW_MEASURE_SEC = 1.0
-const PREVIEW_DIVISOR     = 4
-const PREVIEW_BASE_HZ     = 72
-const PREVIEW_END_BUFFER  = 0.08  // seconds before clip end to trigger next start
+const PREVIEW_BASE_HZ = 72
+// How often the preview's unscheduled tail is rebuilt from the live
+// score (ms of wall time). The annealer moves gradually, so a few
+// seconds of lag between the score and the sound is inaudible — and
+// the tail swap itself is free of cuts or restarts.
+const PREVIEW_REFRESH_MS = 5000
+
+function formatPreviewTime(sec) {
+  if (sec == null || !isFinite(sec)) return '0:00'
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 export default function CompositionPanel({
   scale, edo, costTable,
@@ -54,6 +62,14 @@ export default function CompositionPanel({
   const isAnnealingRef      = useRef(false)
   const previewWaveformRef  = useRef('sine')
   const previewGainRef      = useRef(0.7)
+  // Streaming preview state: the rhythm is fixed for the run (built
+  // once at Start), while the pitches are refreshed from the live
+  // score every few seconds. previewPosRef holds the score position
+  // to resume from after a pause / mute / waveform change.
+  const previewRhythmRef      = useRef(null)
+  const previewPosRef         = useRef(0)
+  const previewLastRefreshRef = useRef(0)
+  const previewPosUiRef       = useRef(0)
   const voiceSettingsRef    = useRef(voiceSettings)
   useEffect(() => { voiceSettingsRef.current = voiceSettings }, [voiceSettings])
 
@@ -67,6 +83,10 @@ export default function CompositionPanel({
   const [previewOn,       setPreviewOn]       = useState(true)
   const [previewWaveform, setPreviewWaveform] = useState(initialWaveform ?? 'sine')
   const [previewGain,     setPreviewGain]     = useState(0.7)
+  // Playhead readout for the streaming preview ({ pos, total } in
+  // seconds, or null when idle). Updated at most twice a second so
+  // the panel is not re-rendered every animation frame.
+  const [previewPos, setPreviewPos] = useState(null)
 
   // Two-Phase Mode progress (runtime state; the enabled toggle lives in App).
   // phase: 'idle' | 'phase1' (cooling to find the transition) |
@@ -115,10 +135,14 @@ export default function CompositionPanel({
   useEffect(() => { previewWaveformRef.current = previewWaveform }, [previewWaveform])
   useEffect(() => { previewGainRef.current     = previewGain     }, [previewGain])
 
-  // Immediately restart the clip when waveform changes so the change is audible at once
+  // Restart the preview when the waveform changes, keeping the
+  // playhead where it was, so the change is audible at once.
+  // stopPreview() saves the position; the tick restarts from it.
   useEffect(() => {
-    if (isAnnealingRef.current && previewOn) audioRef.current?.stop()
-    // stop() resets totalDuration to 0; the RAF tick will detect this and restart
+    if (isAnnealingRef.current && previewOn) {
+      stopPreview()
+      startPreviewLoop()
+    }
   }, [previewWaveform]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Auto-cool timer ────────────────────────────────────────────────────────
@@ -220,18 +244,35 @@ export default function CompositionPanel({
     }))
   }
 
-  // ─── Preview audio ───────────────────────────────────────────────────────────
+  // ─── Streaming preview audio ───────────────────────────────────────────
+  // One playhead walks the whole piece in order and wraps, instead of
+  // rebuilding a 4-second clip of the opening over and over. The
+  // rhythm is fixed for the run (built once at Start from the user's
+  // actual rhythm settings — the same helper the Output panel uses),
+  // so the preview sounds like the piece will sound; only the pitches
+  // move, refreshed from the live score every few seconds via
+  // engine.refreshEvents(), which swaps the unscheduled tail without
+  // stopping anything already playing — no cut, no restart.
 
   function buildPreviewEvents(scoreArray, scoreShape) {
-    if (!scale || !scoreArray) return []
-    const numVoices = scoreShape[0]
-    const rhythmPerVoice = Array.from({ length: numVoices }, () =>
-      generateSimpleRhythm(PREVIEW_MEASURES, PREVIEW_MEASURE_SEC, PREVIEW_DIVISOR)
-    )
+    if (!scale || !scoreArray || !previewRhythmRef.current) return []
     return buildNoteEvents(
-      scoreArray, scoreShape, scale, edo, rhythmPerVoice,
+      scoreArray, scoreShape, scale, edo, previewRhythmRef.current,
       PREVIEW_BASE_HZ, null, voiceSettingsRef.current,
     )
+  }
+
+  function startPreviewEngine(events, seekFrom) {
+    const engine = audioRef.current
+    if (!engine) return
+    const wf  = previewWaveformRef.current
+    const isF = wf.startsWith('f')
+    engine.start(events, {
+      waveform:   isF ? 'sine' : wf,
+      harmonics:  isF ? F_TABLES[wf] : null,
+      masterGain: previewGainRef.current,
+      seekFrom,
+    })
   }
 
   function startPreviewLoop() {
@@ -240,22 +281,53 @@ export default function CompositionPanel({
     if (!engine) return
 
     function tick() {
+      // Keep the rolling lookahead window filled — start() only
+      // schedules the first 10 s, so without this a long piece would
+      // go silent after 10 s.
+      engine.scheduleAhead()
       const pos   = engine.playbackPosition
       const total = engine.totalDuration
-      if (total === 0 || pos >= total - PREVIEW_END_BUFFER) {
+      if (total === 0) {
+        // Not playing (fresh start, or stopped): begin at the saved
+        // position — 0 for a new run, the pause point for a resume.
         const s = latestScoreRef.current
         if (s) {
           const events = buildPreviewEvents(s.scoreArray, s.scoreShape)
           if (events.length > 0) {
-            const wf  = previewWaveformRef.current
-            const isF = wf.startsWith('f')
-            engine.start(events, {
-              waveform:   isF ? 'sine' : wf,
-              harmonics:  isF ? F_TABLES[wf] : null,
-              masterGain: previewGainRef.current,
-            })
+            startPreviewEngine(events, previewPosRef.current)
+            previewPosRef.current = 0
           }
         }
+      } else if (pos >= total) {
+        // Played through the whole piece: loop from the top with
+        // fresh pitches from the live score.
+        const s = latestScoreRef.current
+        if (s) {
+          const events = buildPreviewEvents(s.scoreArray, s.scoreShape)
+          if (events.length > 0) startPreviewEngine(events, 0)
+        }
+      } else {
+        // Refresh the unscheduled tail every few seconds so the sound
+        // tracks the annealing. Notes already scheduled keep playing,
+        // so there is no cut or restart; if the lists ever fail to
+        // line up, refreshEvents returns false and the next loop
+        // point picks up the fresh pitches.
+        const now = performance.now()
+        if (now - previewLastRefreshRef.current >= PREVIEW_REFRESH_MS) {
+          previewLastRefreshRef.current = now
+          const s = latestScoreRef.current
+          if (s) {
+            const events = buildPreviewEvents(s.scoreArray, s.scoreShape)
+            if (events.length > 0) engine.refreshEvents(events)
+          }
+        }
+      }
+      // Playhead readout, throttled so the panel re-renders at most
+      // twice a second.
+      const nowMs = performance.now()
+      if (nowMs - previewPosUiRef.current >= 500) {
+        previewPosUiRef.current = nowMs
+        setPreviewPos({ pos: engine.playbackPosition, total: engine.totalDuration })
       }
       previewRafRef.current = requestAnimationFrame(tick)
     }
@@ -265,6 +337,12 @@ export default function CompositionPanel({
   function stopPreview() {
     cancelAnimationFrame(previewRafRef.current)
     previewRafRef.current = null
+    // Remember where the playhead was, so pause / mute / waveform
+    // changes resume from the same spot instead of the top. Read
+    // before stop() — afterwards the position is 0. The readout
+    // keeps showing the frozen position while paused; handleReset
+    // clears it.
+    if (audioRef.current) previewPosRef.current = audioRef.current.playbackPosition
     audioRef.current?.stop()
   }
 
@@ -295,6 +373,12 @@ export default function CompositionPanel({
     if (!audioRef.current) audioRef.current = new AudioEngineClass()
     audioRef.current.prepare()
     latestScoreRef.current = null
+    // The preview rhythm is fixed for the run — built once from the
+    // user's actual rhythm settings, so the preview sounds like the
+    // piece will sound. Only the pitches move as it anneals.
+    previewRhythmRef.current = buildRhythmPerVoice([voiceCount, ...cubeDims], rhythmSettings)
+    previewPosRef.current = 0
+    previewLastRefreshRef.current = 0
     isAnnealingRef.current = true
     if (previewOn) startPreviewLoop()
 
@@ -358,6 +442,7 @@ export default function CompositionPanel({
     isAnnealingRef.current = false
     stopPreview()
     setStatus('idle')
+    setPreviewPos(null)
     setProgress({ totalCost: null, iteration: 0 })
     setEnergyBuckets(new Array(N_ENERGY_BUCKETS).fill(null))
     setHistCounts([])
@@ -530,6 +615,11 @@ export default function CompositionPanel({
               {status === 'idle'    && 'Press Start to begin annealing.'}
               {status === 'running' && 'Running — drag the temperature slider to find the sweet spot.'}
               {status === 'paused'  && 'Paused.'}
+              {previewPos != null && previewPos.total > 0 && (
+                <span data-testid="preview-position" className="tabular-nums">
+                  {' '}· {formatPreviewTime(previewPos.pos)} / {formatPreviewTime(previewPos.total)}
+                </span>
+              )}
             </div>
           </div>
 

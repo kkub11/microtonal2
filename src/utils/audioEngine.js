@@ -406,6 +406,36 @@ export class AudioEngine {
   }
 
   /**
+   * Swap the not-yet-scheduled tail of the event list for a fresh one.
+   * The live preview calls this as the annealer changes the pitches:
+   * the rhythm (startSec/durationSec per slot) is fixed for the run,
+   * so the new list is slot-identical to the current one and only the
+   * frequencies differ. Events already handed to oscillators keep
+   * playing untouched — no stop, no cut, no restart.
+   *
+   * _schedIdx is preserved: it points at the first unscheduled event,
+   * and the new list, sorted the same way, has the same events before
+   * it (sort is stable and the comparator only sees startSec).
+   *
+   * @param {object[]} noteEvents  Same length and same startSec /
+   *   durationSec per slot as the current list; only freqHz may differ.
+   * @returns {boolean} false when nothing is playing or the lists do
+   *   not line up (caller should just wait for the next loop point).
+   */
+  refreshEvents(noteEvents) {
+    if (this._startTime === null || !this._ctx) return false
+    if (!Array.isArray(noteEvents) || noteEvents.length !== this._allEvents.length) return false
+    const sorted = [...noteEvents].sort((a, b) => a.startSec - b.startSec)
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].startSec !== this._allEvents[i].startSec ||
+          sorted[i].durationSec !== this._allEvents[i].durationSec) return false
+    }
+    this._allEvents = sorted
+    this._totalDuration = sorted.reduce((m, e) => Math.max(m, e.startSec + e.durationSec), 0)
+    return true
+  }
+
+  /**
    * Schedule events whose startSec falls within the next lookaheadSec seconds.
    * Call this each rAF tick to keep the rolling window filled.
    */

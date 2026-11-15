@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { F_TABLES, parseFTables, buildNoteEvents } from './audioEngine.js'
+import { F_TABLES, parseFTables, buildNoteEvents, AudioEngine } from './audioEngine.js'
 
 // ── F_TABLES ────────────────────────────────────────────────────────────────
 
@@ -156,5 +156,84 @@ describe('buildNoteEvents', () => {
       [rhythm2(4)], baseHz)
     expect(events).toHaveLength(4)
     expect(events.every(e => e.voice === 0)).toBe(true)
+  })
+})
+
+// ── refreshEvents ───────────────────────────────────────────────────────
+
+// The engine's scheduler state is stubbed directly — no AudioContext is
+// needed, because refreshEvents only swaps the event list; it never
+// creates an oscillator.
+function makePlayingEngine() {
+  const engine = new AudioEngine()
+  engine._ctx = { currentTime: 100 }  // stub: only the null check reads it
+  engine._startTime = 90
+  engine._allEvents = [
+    { startSec: 0, durationSec: 1, freqHz: 100, voice: 0 },
+    { startSec: 1, durationSec: 1, freqHz: 200, voice: 0 },
+    { startSec: 2, durationSec: 1, freqHz: 300, voice: 0 },
+  ]
+  engine._schedIdx = 2  // first two events already scheduled
+  engine._totalDuration = 3
+  return engine
+}
+
+describe('refreshEvents', () => {
+  test('swaps freqHz of unscheduled events, preserves _schedIdx', () => {
+    const engine = makePlayingEngine()
+    const fresh = [
+      { startSec: 0, durationSec: 1, freqHz: 110, voice: 0 },
+      { startSec: 1, durationSec: 1, freqHz: 210, voice: 0 },
+      { startSec: 2, durationSec: 1, freqHz: 310, voice: 0 },
+    ]
+    expect(engine.refreshEvents(fresh)).toBe(true)
+    expect(engine._schedIdx).toBe(2)
+    expect(engine._allEvents[2].freqHz).toBe(310)
+    expect(engine._totalDuration).toBe(3)
+  })
+
+  test('accepts the same events in voice-major (unsorted) order', () => {
+    const engine = makePlayingEngine()
+    engine._allEvents = [
+      { startSec: 0, durationSec: 1, freqHz: 100, voice: 0 },
+      { startSec: 0, durationSec: 1, freqHz: 150, voice: 1 },
+      { startSec: 1, durationSec: 1, freqHz: 200, voice: 0 },
+      { startSec: 1, durationSec: 1, freqHz: 250, voice: 1 },
+    ]
+    engine._schedIdx = 2
+    engine._totalDuration = 2
+    const fresh = [
+      { startSec: 0, durationSec: 1, freqHz: 101, voice: 0 },
+      { startSec: 1, durationSec: 1, freqHz: 201, voice: 0 },
+      { startSec: 0, durationSec: 1, freqHz: 151, voice: 1 },
+      { startSec: 1, durationSec: 1, freqHz: 251, voice: 1 },
+    ]
+    expect(engine.refreshEvents(fresh)).toBe(true)
+    // Sorted the same way, so the unscheduled tail lines up.
+    expect(engine._allEvents[2]).toMatchObject({ startSec: 1, voice: 0, freqHz: 201 })
+    expect(engine._allEvents[3]).toMatchObject({ startSec: 1, voice: 1, freqHz: 251 })
+  })
+
+  test('returns false when nothing is playing', () => {
+    const engine = new AudioEngine()
+    expect(engine.refreshEvents([])).toBe(false)
+  })
+
+  test('returns false on length mismatch and leaves the list alone', () => {
+    const engine = makePlayingEngine()
+    const before = engine._allEvents
+    expect(engine.refreshEvents([{ startSec: 0, durationSec: 1, freqHz: 1 }])).toBe(false)
+    expect(engine._allEvents).toBe(before)
+  })
+
+  test('returns false when startSec/durationSec differ', () => {
+    const engine = makePlayingEngine()
+    const shifted = [
+      { startSec: 0, durationSec: 1, freqHz: 110, voice: 0 },
+      { startSec: 1, durationSec: 2, freqHz: 210, voice: 0 },
+      { startSec: 2, durationSec: 1, freqHz: 310, voice: 0 },
+    ]
+    expect(engine.refreshEvents(shifted)).toBe(false)
+    expect(engine._allEvents[1].freqHz).toBe(200)
   })
 })
